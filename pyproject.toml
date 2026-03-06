@@ -1,0 +1,22 @@
+[project]
+name = "antahkarana"
+version = "0.1.0"
+description = "A platform-agnostic persistent memory layer for AI agents"
+requires-python = ">=3.12"
+dependencies = [
+    "mcp>=1.25,<2",
+    "zvec",
+    "google-genai",
+    "pyyaml",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"

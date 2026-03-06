@@ -1,0 +1,29 @@
+# Ahaṃkāra — Identity Layer (Phase 4)
+# This file is loaded but not actively used until Phase 4.
+
+name: "Mike"
+role: "Web developer and SaaS builder"
+context: |
+  Self-employed, running Sonic Pixel in Japan.
+  Primary client: Friendly Fires (Canadian fireplace/BBQ parts retailer).
+  Building SaaS products for English-speaking expats in Japan (Jozu, KantanHealth).
+  Uses Claude Code, OpenClaw, Gemini for different workflows.
+
+active_projects:
+  - name: "Jozu"
+    scope: "/project/jozu"
+    description: "AI-powered document translation app for Japan expats"
+  - name: "Friendly Fires"
+    scope: "/project/friendly-fires"
+    description: "WooCommerce/Shopify fireplace parts retailer"
+  - name: "Antahkarana"
+    scope: "/project/antahkarana"
+    description: "This memory system itself"
+
+preferences:
+  communication_style: "Direct, concise, technical"
+  values: ["simplicity", "portability", "vedic_philosophy"]
+
+boundaries:
+  - "Do not store sensitive credentials or API keys"
+  - "Do not store personal health information"
