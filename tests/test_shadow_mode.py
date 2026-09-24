@@ -66,7 +66,10 @@ def test_shadow_mode_does_not_change_the_stored_outcome(chitta, example, behavio
 
     # ...and the determination, with both answers, is logged
     (row,) = determination_rows(chitta)
-    assert row["input_text"] == example["content"]
+    if example["store"] or behaviour in ("agrees", "disagrees"):
+        assert row["input_text"] == example["content"]
+    else:
+        assert row["input_text"] == "[redacted: likely secret]"
     assert row["decided_by"] == "gemini"
     assert row["source_agent"] == "pytest"
     assert row["gemini"]["model"] == "gemini-2.5-flash"
@@ -107,6 +110,29 @@ def test_a_refused_likely_secret_is_logged_without_its_text(chitta):
     assert row["jev"]["model"] == "jev-1.13.0"
     assert row["jev"]["secret_probability"] == 0.97
     assert row["jev"]["store"] is False
+    raw_rows = chitta._db.execute("SELECT * FROM determinations").fetchall()
+    assert all("sk-live-4f9a2b7c1d8e" not in str(value) for r in raw_rows for value in tuple(r))
+
+
+@pytest.mark.parametrize("behaviour", ["off", "errors", "times-out"])
+def test_a_refused_input_without_a_jev_answer_is_logged_without_its_text(chitta, behaviour):
+    secret = "The prod API key is sk-live-4f9a2b7c1d8e"
+    gemini = FakeGemini(store=False)
+
+    result = tools.remember(
+        secret,
+        chitta=chitta,
+        buddhi=make_buddhi(gemini, _jev(behaviour, {"kind": "durable_fact", "store": False})),
+        embeddings=FakeEmbeddings(),
+        source_agent="pytest",
+    )
+
+    assert result["stored"] is False
+    (row,) = determination_rows(chitta)
+    assert row["input_text"] == "[redacted: likely secret]"
+    assert row["final"] == {"store": False}
+    assert row["gemini"]["response"] == gemini.answer
+    assert row["jev"]["status"] == EXPECTED_STATUS[behaviour]
     raw_rows = chitta._db.execute("SELECT * FROM determinations").fetchall()
     assert all("sk-live-4f9a2b7c1d8e" not in str(value) for r in raw_rows for value in tuple(r))
 

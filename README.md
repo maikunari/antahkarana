@@ -104,9 +104,11 @@ Transition memories to latent (dormant) or dissolved (trace only) state.
 
 ## Determination log and Jev shadow mode
 
-Every `remember` call writes one row to the `determinations` table in `chitta.db`: the input text in `input_text` (a refused input Jev flags as a likely secret is logged as `[redacted: likely secret]` instead), and a JSON `determination` holding Gemini's model id and raw JSON answer, the Jev shadow answer, `decided_by`, the `source_agent`, and the `final` outcome (stored or not, with the memory ID, scope, importance and categories after caller overrides). A logging failure never fails `remember`.
+Every `remember` call writes one row to the `determinations` table in `chitta.db`: the input text in `input_text`, and a JSON `determination` holding Gemini's model id and raw JSON answer, the Jev shadow answer, `decided_by`, the `source_agent`, and the `final` outcome (stored or not, with the memory ID, scope, importance and categories after caller overrides). A logging failure never fails `remember`.
 
-With `TYPESAFE_API_KEY` set, Buddhi also asks TypeSafe's Jev (`src/buddhi/jev.py`, pinned to `jev-1.13.0`) the keep-or-discard question, in parallel with Gemini. Jev sees only the memory text. Its answer (kind, per-kind probabilities, keep probability, secret probability, would-store) is logged, and **Gemini's `store` still decides**. Any Jev error, or no answer within 3 s of the call starting, is logged as `error` or `timeout` and changes nothing. Without the key, Jev is off.
+A refused input is logged as `[redacted: likely secret]` instead of its text when Jev's secret probability is at or above `SECRET_THRESHOLD`, or when Jev gave no answer (key unset, error or timeout), since then there is no secret signal. Stored inputs are logged as written.
+
+With `TYPESAFE_API_KEY` set, Buddhi also asks TypeSafe's Jev (`src/buddhi/jev.py`, pinned to `jev-1.13.0`) the keep-or-discard question, in parallel with Gemini. Jev sees only the memory text. Its answer (kind, per-kind probabilities, keep probability, secret probability, would-store) is logged, and **Gemini's `store` still decides**. Any Jev error, or no answer within 3 s of the call starting, is logged as `error` or `timeout` and never changes whether the memory is stored. Without the key, Jev is off.
 
 Inspect disagreements:
 

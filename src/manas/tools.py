@@ -86,7 +86,7 @@ def remember(
 
 def _likely_secret(determination: BuddhiDetermination) -> bool:
     jev = determination.trace.get("jev", {})
-    return jev.get("status") == "ok" and jev["secret_probability"] >= SECRET_THRESHOLD
+    return jev.get("status") != "ok" or jev["secret_probability"] >= SECRET_THRESHOLD
 
 
 def _log_determination(
