@@ -6,6 +6,7 @@ import json
 import logging
 from typing import TYPE_CHECKING
 
+from src.buddhi.jev import SECRET_THRESHOLD
 from src.chitta.models import MemoryRecord
 
 if TYPE_CHECKING:
@@ -15,6 +16,8 @@ if TYPE_CHECKING:
     from src.chitta.store import ChittaStore
 
 logger = logging.getLogger(__name__)
+
+REDACTED_SECRET = "[redacted: likely secret]"
 
 
 def remember(
@@ -38,7 +41,8 @@ def remember(
     determination = buddhi.evaluate(content)
 
     if not determination.store:
-        _log_determination(chitta, content, determination, source_agent, {"store": False})
+        logged_input = REDACTED_SECRET if _likely_secret(determination) else content
+        _log_determination(chitta, logged_input, determination, source_agent, {"store": False})
         return {
             "stored": False,
             "reason": "Buddhi determined this content is too trivial to store.",
@@ -78,6 +82,11 @@ def remember(
         "importance": record.importance,
         "categories": record.categories,
     }
+
+
+def _likely_secret(determination: BuddhiDetermination) -> bool:
+    jev = determination.trace.get("jev", {})
+    return jev.get("status") == "ok" and jev["secret_probability"] >= SECRET_THRESHOLD
 
 
 def _log_determination(

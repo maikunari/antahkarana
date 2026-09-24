@@ -160,15 +160,16 @@ class JevClient:
             name: _probability(value, f"probability of {name}")
             for name, value in probabilities.items()
         }
-        if abs(sum(kind_probabilities.values()) - 1.0) > 0.01:
-            raise JevError("kind probabilities do not sum to 1")
+        total = sum(kind_probabilities.values())
+        if total <= 0.0:
+            raise JevError("kind probabilities are all zero")
         choice = kind.get("choice")
         if choice not in KIND_CRITERIA:
             raise JevError("kind choice is not an offered kind")
 
         confidence = _probability(kind.get("confidence"), "kind confidence")
         secret_probability = _probability(secret.get("noul"), "secret noul")
-        store_probability = sum(kind_probabilities[name] for name in KEEP_KINDS)
+        store_probability = sum(kind_probabilities[name] for name in KEEP_KINDS) / total
         model = data.get("model")
 
         return JevJudgment(

@@ -50,6 +50,23 @@ def test_keep_probability_and_store(kind, secret, store):
     assert judgment.store is store
 
 
+def test_rounded_probabilities_off_1_are_renormalized():
+    answer = jev_answer("decision")
+    answer["answers"]["kind"]["probabilities"] = {
+        "decision": 0.33,
+        "preference": 0.33,
+        "durable_fact": 0.12,
+        "failed_approach": 0.12,
+        "process": 0.06,
+        "transient": 0.06,
+    }  # sums to 1.02
+
+    judgment = make_jev(FakeTransport(answer)).judge("memory")
+
+    assert judgment.store_probability == pytest.approx(0.90 / 1.02)
+    assert judgment.store is True
+
+
 def _broken(mutate):
     answer = jev_answer("decision")
     mutate(answer)
@@ -65,7 +82,9 @@ def _broken(mutate):
         FakeTransport({"model": "jev-1.13.0"}),
         FakeTransport(_broken(lambda a: a["answers"].pop("secret"))),
         FakeTransport(_broken(lambda a: a["answers"]["kind"]["probabilities"].pop("process"))),
-        FakeTransport(_broken(lambda a: a["answers"]["kind"]["probabilities"].update(decision=0.5))),
+        FakeTransport(_broken(lambda a: a["answers"]["kind"]["probabilities"].update(
+            dict.fromkeys(a["answers"]["kind"]["probabilities"], 0.0)
+        ))),
         FakeTransport(_broken(lambda a: a["answers"]["kind"].update(choice="summary"))),
         FakeTransport(_broken(lambda a: a["answers"]["secret"].update(noul="high"))),
         FakeTransport(_broken(lambda a: a["answers"]["kind"].update(confidence=None))),
@@ -79,7 +98,7 @@ def _broken(mutate):
         "no-answers",
         "no-secret-answer",
         "missing-kind",
-        "probabilities-not-summing-to-1",
+        "all-zero-probabilities",
         "unknown-choice",
         "non-numeric-noul",
         "no-confidence",
