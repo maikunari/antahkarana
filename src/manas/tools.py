@@ -11,6 +11,7 @@ from src.chitta.models import MemoryRecord
 if TYPE_CHECKING:
     from src.buddhi.embeddings import EmbeddingEngine
     from src.buddhi.engine import BuddhiEngine
+    from src.chitta.models import BuddhiDetermination
     from src.chitta.store import ChittaStore
 
 logger = logging.getLogger(__name__)
@@ -30,12 +31,14 @@ def remember(
 
     Buddhi evaluates the content for importance, scope, and categories.
     If Buddhi determines the content should be stored, it is embedded
-    and written to Chitta (Zvec + SQLite).
+    and written to Chitta (Zvec + SQLite). Every determination and its
+    outcome is logged to the determinations table.
     """
     # Buddhi determination
     determination = buddhi.evaluate(content)
 
     if not determination.store:
+        _log_determination(chitta, content, determination, source_agent, {"store": False})
         return {
             "stored": False,
             "reason": "Buddhi determined this content is too trivial to store.",
@@ -51,8 +54,22 @@ def remember(
     )
 
     # Embed and store
-    embedding = embeddings.embed(content)
-    chitta.store(record, embedding)
+    try:
+        embedding = embeddings.embed(content)
+        chitta.store(record, embedding)
+    except Exception as err:
+        final = {"store": False, "error": f"{type(err).__name__}: {err}"}
+        _log_determination(chitta, content, determination, source_agent, final)
+        raise
+
+    final = {
+        "store": True,
+        "memory_id": record.id,
+        "scope": record.scope,
+        "importance": record.importance,
+        "categories": record.categories,
+    }
+    _log_determination(chitta, content, determination, source_agent, final)
 
     return {
         "stored": True,
@@ -61,6 +78,23 @@ def remember(
         "importance": record.importance,
         "categories": record.categories,
     }
+
+
+def _log_determination(
+    chitta: ChittaStore,
+    content: str,
+    determination: BuddhiDetermination,
+    source_agent: str | None,
+    final: dict,
+) -> None:
+    """Write the determination and its outcome to Chitta. A logging failure never fails remember."""
+    try:
+        chitta.log_determination(
+            content,
+            {**determination.trace, "source_agent": source_agent, "final": final},
+        )
+    except Exception:
+        logger.warning("Could not log Buddhi determination", exc_info=True)
 
 
 def recall(

@@ -85,6 +85,8 @@ class BuddhiDetermination:
     scope: str
     categories: list[str]
     store: bool
+    # What each model answered, for the determinations log
+    trace: dict = field(default_factory=dict)
 
 
 @dataclass

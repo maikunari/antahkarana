@@ -1,0 +1,32 @@
+# Kept and refused examples for Buddhi's keep-or-discard call.
+# `source` names where each example comes from; most are the FACT vs PROCESS
+# examples in config/buddhi_prompt.yaml, quoted as written there.
+# `kind` is the Jev kind (src/buddhi/jev.py KIND_CRITERIA) the example should get.
+
+kept:
+  - content: "We chose PostgreSQL because JSONB support."
+    kind: decision
+    source: "buddhi_prompt.yaml, FACT (store)"
+  - content: "Mike prefers short replies in Discord"
+    kind: preference
+    source: "buddhi_prompt.yaml, stated preferences"
+  - content: "As of March 2026, Jozu runs on Flash-Lite."
+    kind: durable_fact
+    source: "buddhi_prompt.yaml, temporal anchors"
+  - content: "We tried Gemini embeddings at 3072 dims, it broke because Zvec was created at 768."
+    kind: failed_approach
+    source: "buddhi_prompt.yaml, failed approaches ('We tried X, it broke because Y') with X and Y filled in"
+  - content: "We talked it through and settled on Postgres."
+    kind: decision
+    source: "Jev investigation report, a decision phrased like discussion"
+
+refused:
+  - content: "We discussed whether to use PostgreSQL."
+    kind: process
+    source: "buddhi_prompt.yaml, PROCESS (skip)"
+  - content: "We went back and forth on whether Jozu should use Flash or Flash-Lite and will look again next week."
+    kind: process
+    source: "buddhi_prompt.yaml, PROCESS: discussion, deliberation, exploration"
+  - content: "Ran ls in the project root; it listed README.md and src."
+    kind: transient
+    source: "buddhi_prompt.yaml, importance 0.0-0.2: one-off commands, transient context"
