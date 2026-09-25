@@ -103,6 +103,17 @@ def test_local_allowlist_lets_a_checked_value_through(tmp_path):
     assert Keeper.load(None).find(f"Shopify admin API token for FF store: {value}") != []
 
 
+def test_a_route_after_a_login_label_is_redacted_unless_allowlisted(tmp_path):
+    # Accepted trade-off: it reads like `user /password`, and a missed password costs more.
+    text = "Login page: see /settings then click"
+
+    scrubbed = Keeper.load(None).scrub(text)
+    assert scrubbed.text == "Login page: see /[secret:prose-credential-pair] then click"
+
+    (tmp_path / "dvarapala.yaml").write_text("allow:\n  - '^settings$'\n")
+    assert Keeper.load(tmp_path).find(text) == []
+
+
 def test_unloadable_rules_raise_keeper_error(tmp_path):
     bad = tmp_path / "rules.toml"
     bad.write_text("[[rules]]\nid = 'x'\nregex = '('\n")

@@ -65,6 +65,9 @@ MEMORY_RULES = [
         ],
     },
     {
+        # Syntax cannot tell `admin /hunter2!!x` from `see /settings`, so a route after a
+        # login label is redacted too: catching real passwords wins, and the local
+        # allowlist (config/dvarapala.yaml) is the remedy for such false positives.
         "id": "prose-credential-pair",
         "regex": (
             r"(?i)\b(?:login|credentials?|creds)\b[^\n]{0,60}?(?:\bis|:)"
