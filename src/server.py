@@ -19,9 +19,11 @@ from src.buddhi.jev import JevClient
 from src.chitta.store import ChittaStore
 from src.dvarapala.keeper import Keeper
 from src.manas import tools
+from src.transport import HOST, load_transport_settings
 
-# Load environment
-load_dotenv()
+# Load environment from the repo's .env whatever the working directory, so Claude Code
+# and a service manager can start the server from anywhere. Real environment wins.
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("antahkarana")
@@ -32,6 +34,8 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
 TYPESAFE_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")
 DATA_DIR = os.environ.get("ANTAHKARANA_DATA_DIR", "./data")
 CONFIG_DIR = os.environ.get("ANTAHKARANA_CONFIG_DIR", "./config")
+# Read before anything opens the store, so a bad setting fails fast.
+TRANSPORT = load_transport_settings(os.environ)
 
 # Initialize components. The secrets keeper loads first: without it nothing starts.
 keeper = Keeper.load(CONFIG_DIR)
@@ -47,8 +51,10 @@ if not OPENROUTER_API_KEY:
     logger.warning("OPENROUTER_API_KEY is not set: Buddhi will refuse every remember")
 logger.info("Buddhi model: %s", buddhi.model)
 
-# Create MCP server
-mcp = FastMCP("antahkarana")
+# Create MCP server. Host and port go in explicitly: FastMCP's own FASTMCP_HOST/FASTMCP_PORT
+# settings are overridden by its constructor defaults. Passing them here (not after) also
+# gives the localhost host FastMCP's DNS rebinding protection.
+mcp = FastMCP("antahkarana", host=HOST, port=TRANSPORT.port)
 
 
 @mcp.tool()
@@ -141,8 +147,17 @@ def forget(
 
 def main() -> None:
     """Run the Antaḥkaraṇa MCP server."""
-    logger.info("Starting Antaḥkaraṇa memory server...")
-    mcp.run()
+    if TRANSPORT.transport == "http":
+        logger.info(
+            "Starting Antaḥkaraṇa memory server on http://%s:%d%s",
+            HOST,
+            TRANSPORT.port,
+            mcp.settings.streamable_http_path,
+        )
+        mcp.run("streamable-http")
+    else:
+        logger.info("Starting Antaḥkaraṇa memory server...")
+        mcp.run()
 
 
 if __name__ == "__main__":

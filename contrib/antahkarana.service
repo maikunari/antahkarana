@@ -1,0 +1,21 @@
+# Antaḥkaraṇa as one shared MCP server over streamable HTTP, as a systemd user service.
+# Adjust the paths to your install, then:
+#   cp contrib/antahkarana.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now antahkarana
+# Keys and ANTAHKARANA_DATA_DIR / ANTAHKARANA_CONFIG_DIR come from the install's .env.
+# The transport is set here, not in .env, so a stdio launch of the same install still works.
+
+[Unit]
+Description=Antaḥkaraṇa memory server (MCP streamable HTTP)
+
+[Service]
+Type=simple
+WorkingDirectory=%h/.local/share/antahkarana/app
+Environment=ANTAHKARANA_TRANSPORT=http
+Environment=ANTAHKARANA_PORT=8799
+ExecStart=%h/.local/share/antahkarana/app/.venv/bin/python -m src
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
