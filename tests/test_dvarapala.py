@@ -103,6 +103,19 @@ def test_local_allowlist_lets_a_checked_value_through(tmp_path):
     assert Keeper.load(None).find(f"Shopify admin API token for FF store: {value}") != []
 
 
+@pytest.mark.parametrize(
+    "allow",
+    ["allow: '^settings$'", "allow:\n  - 42", "allow:\n  - ''", "allow:\n  - '^'",
+     "allow:\n  - '.*'"],
+    ids=["scalar", "non-string", "empty", "caret", "dot-star"],
+)
+def test_a_malformed_or_match_everything_allowlist_fails_closed(tmp_path, allow):
+    (tmp_path / "dvarapala.yaml").write_text(allow + "\n")
+
+    with pytest.raises(KeeperError):
+        Keeper.load(tmp_path)
+
+
 def test_a_route_after_a_login_label_is_redacted_unless_allowlisted(tmp_path):
     # Accepted trade-off: it reads like `user /password`, and a missed password costs more.
     text = "Login page: see /settings then click"

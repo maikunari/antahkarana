@@ -221,8 +221,13 @@ class Keeper:
             path = Path(config_dir) / ALLOW_FILE
             if path.exists():
                 with open(path) as f:
-                    allow = list((yaml.safe_load(f) or {}).get("allow") or [])
-        return cls(allow_regexes=allow)
+                    allow = (yaml.safe_load(f) or {}).get("allow") or []
+        if not isinstance(allow, list) or not all(isinstance(a, str) and a for a in allow):
+            raise KeeperError(f"{ALLOW_FILE}: 'allow' must be a list of non-empty regexes")
+        keeper = cls(allow_regexes=allow)
+        if any(_compile(pattern).search("") for pattern in allow):
+            raise KeeperError(f"{ALLOW_FILE}: an allow regex matches everything")
+        return keeper
 
     @property
     def rule_count(self) -> int:
