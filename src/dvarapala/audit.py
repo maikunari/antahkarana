@@ -12,7 +12,7 @@ rebuilt so the old bytes are gone. It finishes by re-auditing and
 byte-searching every data file for the values it removed.
 
 Neither can reach copies outside the data directory (backups, snapshots) or
-text already sent to Gemini or Jev: rotate what the audit lists.
+text already sent to Buddhi's model or Jev: rotate what the audit lists.
 """
 
 from __future__ import annotations
@@ -85,7 +85,7 @@ class AuditReport:
                 out.append(f"  {h.table} {h.row_id}  {h.column}  {h.created_at}{agent}")
             out.append(
                 "Rotate these credentials: text stored before the keeper existed was sent "
-                "to Gemini (and to Jev when TYPESAFE_API_KEY was set). Purging does not "
+                "to Buddhi's model (and to Jev when TYPESAFE_API_KEY was set). Purging does not "
                 "un-send it."
             )
             for kind, (first, last) in sorted(self.rotation().items()):
@@ -164,7 +164,7 @@ def purge(
     to_embed = sum(1 for row, content in memories if _re_embeds(row, content))
     if to_embed and embed is None:
         raise EmbedderRequired(
-            f"{to_embed} memories need re-embedding after scrubbing; set GEMINI_API_KEY"
+            f"{to_embed} memories need re-embedding after scrubbing, and no embedder was given"
         )
 
     chitta = ChittaStore(data_dir, keeper=keeper)

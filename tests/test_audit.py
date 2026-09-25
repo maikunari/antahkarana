@@ -43,7 +43,7 @@ def seeded(tmp_path):
     db.execute(
         "INSERT INTO determinations (id, input_text, determination, created_at, memory_id) "
         "VALUES ('d1', ?, ?, '2026-01-01', 'm1')",
-        (SAMPLE.text, json.dumps({"gemini": {"response": {"scope": f"/k/{BARE}"}},
+        (SAMPLE.text, json.dumps({"buddhi": {"response": {"scope": f"/k/{BARE}"}},
                                   "source_agent": "claude-code", "final": {"store": True}})),
     )
     db.execute(
@@ -126,7 +126,7 @@ def test_purge_removes_every_secret_and_verifies_it(seeded):
 def test_purge_changes_nothing_when_it_cannot_re_embed(seeded):
     before = _snapshot(seeded)
 
-    with pytest.raises(EmbedderRequired, match="GEMINI_API_KEY"):
+    with pytest.raises(EmbedderRequired, match="no embedder"):
         purge(seeded, default_keeper(), None)
 
     assert _snapshot(seeded) == before
@@ -150,17 +150,24 @@ def test_purge_needs_no_embedder_when_nothing_is_re_embedded(tmp_path):
     assert BARE.encode() not in _all_bytes(data)
 
 
+class _UnloadableEmbeddings:
+    def load(self):
+        raise OSError("model files unavailable offline")
+
+
 def test_cli_never_prints_a_secret(seeded, capsys, monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr("src.dvarapala.__main__.load_dotenv", lambda: None)
+    monkeypatch.setattr("src.dvarapala.__main__.EmbeddingEngine", _UnloadableEmbeddings)
+    before = _snapshot(seeded)
 
     assert main(["audit", "--data-dir", str(seeded)]) == 1
-    assert main(["purge", "--data-dir", str(seeded)]) == 2  # no key: nothing changed
+    assert main(["purge", "--data-dir", str(seeded)]) == 2  # no embedding model: nothing changed
 
     out = capsys.readouterr().out
     assert "memories.content  stripe-access-token  x1" in out
-    assert "Nothing changed" in out
+    assert "Nothing changed: could not load the embedding model" in out
     assert SECRET not in out and BARE not in out
+    assert _snapshot(seeded) == before
 
 
 def test_cli_audit_of_a_missing_database_is_a_no_op(tmp_path, capsys):

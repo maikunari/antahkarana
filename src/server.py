@@ -27,8 +27,8 @@ logging.basicConfig(level=logging.INFO, format="%(name)s - %(levelname)s - %(mes
 logger = logging.getLogger("antahkarana")
 
 # Configuration
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-# Optional: enables the Jev shadow judge. Absent means off; Gemini decides either way.
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+# Optional: enables the Jev shadow judge. Absent means off; Buddhi decides either way.
 TYPESAFE_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")
 DATA_DIR = os.environ.get("ANTAHKARANA_DATA_DIR", "./data")
 CONFIG_DIR = os.environ.get("ANTAHKARANA_CONFIG_DIR", "./config")
@@ -39,10 +39,13 @@ logger.info("Secrets keeper: %d rules", keeper.rule_count)
 chitta = ChittaStore(data_dir=DATA_DIR, keeper=keeper)
 chitta.init()
 
-embeddings = EmbeddingEngine(api_key=GEMINI_API_KEY)
+embeddings = EmbeddingEngine()
 jev = JevClient(api_key=TYPESAFE_API_KEY) if TYPESAFE_API_KEY else None
 logger.info("Jev shadow judge: %s", f"on ({jev.model})" if jev else "off")
-buddhi = BuddhiEngine(api_key=GEMINI_API_KEY, config_dir=CONFIG_DIR, jev=jev)
+buddhi = BuddhiEngine(api_key=OPENROUTER_API_KEY, config_dir=CONFIG_DIR, jev=jev)
+if not OPENROUTER_API_KEY:
+    logger.warning("OPENROUTER_API_KEY is not set: Buddhi will refuse every remember")
+logger.info("Buddhi model: %s", buddhi.model)
 
 # Create MCP server
 mcp = FastMCP("antahkarana")

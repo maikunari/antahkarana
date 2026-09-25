@@ -87,6 +87,8 @@ class BuddhiDetermination:
     store: bool
     # What each model answered, for the determinations log
     trace: dict = field(default_factory=dict)
+    # Set when Buddhi's model failed and this determination is a refusal
+    error: str | None = None
 
 
 @dataclass
