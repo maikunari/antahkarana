@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from src.buddhi.jev import SECRET_THRESHOLD
 from src.chitta.models import MemoryRecord
+from src.dvarapala.keeper import Keeper, Scrubbed, default_keeper
 
 if TYPE_CHECKING:
     from src.buddhi.embeddings import EmbeddingEngine
@@ -19,6 +20,15 @@ logger = logging.getLogger(__name__)
 
 REDACTED_SECRET = "[redacted: likely secret]"
 
+REDACTED_NOTE = (
+    "{n} secret(s) removed before storage and before any model call; the value was not "
+    "stored. Store a pointer instead (e.g. the 1Password item name)."
+)
+SECRET_ONLY_NOTE = (
+    "Nothing but a secret was left to remember. Nothing was stored or sent to any model."
+)
+KEEPER_ERROR_NOTE = "The secrets keeper failed, so nothing was stored or sent to any model."
+
 
 def remember(
     content: str,
@@ -29,31 +39,69 @@ def remember(
     scope: str | None = None,
     importance: float | None = None,
     source_agent: str | None = None,
+    keeper: Keeper | None = None,
 ) -> dict:
     """Store a memory through the Antaḥkaraṇa pipeline.
 
-    Buddhi evaluates the content for importance, scope, and categories.
-    If Buddhi determines the content should be stored, it is embedded
-    and written to Chitta (Zvec + SQLite). Every determination and its
-    outcome is logged to the determinations table.
+    Dvārapāla scrubs every secret out of the caller's text first, so Buddhi,
+    Jev, the embedder and Chitta only ever see the scrubbed text. Buddhi then
+    evaluates it for importance, scope, and categories. If Buddhi determines
+    the content should be stored, it is embedded and written to Chitta
+    (Zvec + SQLite). Every determination and its outcome is logged to the
+    determinations table.
     """
-    # Buddhi determination
+    try:
+        keeper = keeper or default_keeper()
+        scrubbed = keeper.scrub(content)
+        scope_scrub = keeper.scrub(scope) if scope is not None else None
+        agent_scrub = keeper.scrub(source_agent) if source_agent is not None else None
+    except Exception:
+        # Fail closed: no model call and no write without a working keeper.
+        logger.error("Secrets keeper failed; refusing remember")
+        return {"stored": False, "reason": "keeper_error", "note": KEEPER_ERROR_NOTE}
+
+    # A caller scope or agent name holding a secret is dropped, not stored.
+    if scope_scrub is not None and scope_scrub.redacted:
+        scope = None
+    if agent_scrub is not None and agent_scrub.redacted:
+        source_agent = None
+    redactions = _redactions(content=scrubbed, scope=scope_scrub, source_agent=agent_scrub)
+    content = scrubbed.text
+
+    if scrubbed.secret_only():
+        trace = {"decided_by": "dvarapala", "redactions": redactions}
+        final = {"store": False, "reason": "secret_only"}
+        _log_trace(chitta, keeper, content, trace, source_agent, final)
+        return {
+            "stored": False,
+            "reason": "secret_only",
+            "redactions": redactions,
+            "note": SECRET_ONLY_NOTE,
+        }
+
+    # Buddhi determination, on scrubbed text only
     determination = buddhi.evaluate(content)
+    determination.trace["redactions"] = redactions
 
     if not determination.store:
         logged_input = REDACTED_SECRET if _likely_secret(determination) else content
-        _log_determination(chitta, logged_input, determination, source_agent, {"store": False})
-        return {
-            "stored": False,
-            "reason": "Buddhi determined this content is too trivial to store.",
-        }
+        final = {"store": False}
+        _log_determination(chitta, keeper, logged_input, determination, source_agent, final)
+        return _with_redactions(
+            {
+                "stored": False,
+                "reason": "Buddhi determined this content is too trivial to store.",
+            },
+            redactions,
+        )
 
-    # Build the memory record, allowing user overrides
+    # Build the memory record, allowing user overrides. Buddhi's scope and
+    # categories are scrubbed too, in case the model echoed a secret.
     record = MemoryRecord(
         content=content,
-        scope=scope if scope is not None else determination.scope,
+        scope=scope if scope is not None else _clean_scope(keeper, determination.scope),
         importance=importance if importance is not None else determination.importance,
-        categories=determination.categories,
+        categories=[c for c in determination.categories if not keeper.find(c)],
         source_agent=source_agent,
     )
 
@@ -63,7 +111,7 @@ def remember(
         chitta.store(record, embedding)
     except Exception as err:
         final = {"store": False, "error": f"{type(err).__name__}: {err}"}
-        _log_determination(chitta, content, determination, source_agent, final)
+        _log_determination(chitta, keeper, content, determination, source_agent, final)
         raise
 
     final = {
@@ -73,15 +121,39 @@ def remember(
         "importance": record.importance,
         "categories": record.categories,
     }
-    _log_determination(chitta, content, determination, source_agent, final)
+    _log_determination(chitta, keeper, content, determination, source_agent, final)
 
-    return {
-        "stored": True,
-        "memory_id": record.id,
-        "scope": record.scope,
-        "importance": record.importance,
-        "categories": record.categories,
-    }
+    return _with_redactions(
+        {
+            "stored": True,
+            "memory_id": record.id,
+            "scope": record.scope,
+            "importance": record.importance,
+            "categories": record.categories,
+        },
+        redactions,
+    )
+
+
+def _redactions(**fields: Scrubbed | None) -> list[dict]:
+    """What was removed, by field and kind. Never the value or where it was."""
+    return [
+        {"field": name, "kind": kind, "count": count}
+        for name, scrubbed in fields.items()
+        if scrubbed is not None
+        for kind, count in sorted(scrubbed.kinds().items())
+    ]
+
+
+def _with_redactions(result: dict, redactions: list[dict]) -> dict:
+    if redactions:
+        result["redactions"] = redactions
+        result["note"] = REDACTED_NOTE.format(n=sum(r["count"] for r in redactions))
+    return result
+
+
+def _clean_scope(keeper: Keeper, scope: str) -> str:
+    return "/" if keeper.find(scope) else scope
 
 
 def _likely_secret(determination: BuddhiDetermination) -> bool:
@@ -91,17 +163,31 @@ def _likely_secret(determination: BuddhiDetermination) -> bool:
 
 def _log_determination(
     chitta: ChittaStore,
+    keeper: Keeper,
     content: str,
     determination: BuddhiDetermination,
     source_agent: str | None,
     final: dict,
 ) -> None:
-    """Write the determination and its outcome to Chitta. A logging failure never fails remember."""
+    _log_trace(chitta, keeper, content, determination.trace, source_agent, final)
+
+
+def _log_trace(
+    chitta: ChittaStore,
+    keeper: Keeper,
+    content: str,
+    trace: dict,
+    source_agent: str | None,
+    final: dict,
+) -> None:
+    """Write the determination and its outcome to Chitta. A logging failure never fails remember.
+
+    The whole row is scrubbed first: a model answer or an error string can
+    echo text that the input scrub already removed from `content`.
+    """
     try:
-        chitta.log_determination(
-            content,
-            {**determination.trace, "source_agent": source_agent, "final": final},
-        )
+        row, _ = keeper.scrub_value({**trace, "source_agent": source_agent, "final": final})
+        chitta.log_determination(content, row)
     except Exception:
         logger.warning("Could not log Buddhi determination", exc_info=True)
 
@@ -114,12 +200,19 @@ def recall(
     limit: int = 5,
     scope: str | None = None,
     include_latent: bool = False,
+    keeper: Keeper | None = None,
 ) -> dict:
     """Retrieve relevant memories for a given context.
 
-    Embeds the query, performs semantic search in Zvec, joins with SQLite
-    metadata, and returns composite-scored results.
+    Scrubs secrets out of the query, embeds it, performs semantic search in
+    Zvec, joins with SQLite metadata, and returns composite-scored results.
     """
+    try:
+        scrubbed = (keeper or default_keeper()).scrub(query)
+    except Exception:
+        logger.error("Secrets keeper failed; refusing recall")
+        return {"count": 0, "memories": [], "error": "keeper_error", "note": KEEPER_ERROR_NOTE}
+    query = scrubbed.text
     query_embedding = embeddings.embed(query)
 
     results = chitta.search(
@@ -133,11 +226,14 @@ def recall(
     for result in results:
         chitta.update_recall_stats(result.memory_id)
 
-    return {
+    result = {
         "query": query,
         "count": len(results),
         "memories": [r.to_dict() for r in results],
     }
+    if scrubbed.redacted:
+        result["redactions"] = _redactions(query=scrubbed)
+    return result
 
 
 def forget(
@@ -150,6 +246,9 @@ def forget(
     """Transition memories to latent or dissolved state.
 
     Targets a specific memory by ID, or all memories in a scope subtree.
+    Latent keeps the content (it is reversible). Dissolved purges it: the
+    memory's text, its vector, its determinations' input text and its
+    feedback text are removed, leaving a trace record.
     """
     if not memory_id and not scope:
         return {
@@ -170,4 +269,5 @@ def forget(
     return {
         "affected": affected,
         "transitioned_to": new_state,
+        "content_purged": force_dissolve and affected > 0,
     }
