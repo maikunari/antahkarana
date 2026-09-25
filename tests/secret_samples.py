@@ -68,6 +68,8 @@ def positives() -> list[Sample]:
         _sample("prose-password", "The office wifi password is {}.", "hunter2-sakura-77"),
         _sample("credential-pair", "WP admin login for friendlyfires.ca is mike / {}",
                 "Tr0ub4dor&3xyz"),
+        _sample("credential-pair-slash", "Login: admin / {}", "Xk9/fP2+abc="),
+        _sample("credential-pair-slash-prose", "creds: deploy / {} for prod", "abc/def12345"),
         _sample("generic-api-key", "typesafe api_key: {} works for the shadow judge",
                 _s(40, string.ascii_lowercase + string.digits)),
         _sample("env-block", "TYPESAFE_API_KEY={}\nANTAHKARANA_DATA_DIR=./data for the laptop",

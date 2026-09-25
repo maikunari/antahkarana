@@ -68,7 +68,7 @@ MEMORY_RULES = [
         "id": "prose-credential-pair",
         "regex": (
             r"(?i)\b(?:login|credentials?|creds)\b[^\n]{0,60}?(?:\bis|:)"
-            r"\s+[^\s/]{1,64}\s*/\s*([^\s/]{6,128})(?:\s|$)"
+            r"\s+[^\s/]{1,64}(?:\s+/\s+(\S{6,128})|/([^\s/]{6,128})(?:\s|$))"
         ),
         "keywords": ["login", "cred"],
         "allowlists": [
@@ -286,7 +286,9 @@ class Keeper:
             if rule.keywords and not any(k in lowered for k in rule.keywords):
                 continue
             for m in rule.regex.finditer(text):
-                group = rule.secret_group or (1 if m.re.groups >= 1 and m.group(1) else 0)
+                group = rule.secret_group or next(
+                    (i for i in range(1, m.re.groups + 1) if m.group(i)), 0
+                )
                 if not m.group(group):
                     group = 0
                 secret = m.group(group)
