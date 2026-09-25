@@ -73,16 +73,18 @@ def parse_determination(content: object) -> dict:
         raise BuddhiError("importance is outside 0..1")
     if not isinstance(data["store"], bool):
         raise BuddhiError("store is not a boolean")
-    scope = data["scope"]
-    if not isinstance(scope, str):
+    if not isinstance(data["scope"], str):
         raise BuddhiError("scope is not a string")
-    scope = scope.strip()
-    if not scope.startswith("/"):
-        scope = "/" + scope
     categories = data["categories"]
     if not isinstance(categories, list) or not all(isinstance(c, str) for c in categories):
         raise BuddhiError("categories is not a list of strings")
-    return {**data, "importance": float(importance), "scope": scope}
+    return data
+
+
+def normalise_scope(scope: str) -> str:
+    """The model's scope as a path: trimmed, with a leading /."""
+    scope = scope.strip()
+    return scope if scope.startswith("/") else "/" + scope
 
 
 class BuddhiEngine:
@@ -157,8 +159,8 @@ class BuddhiEngine:
             )
 
         return BuddhiDetermination(
-            importance=data["importance"],
-            scope=data["scope"],
+            importance=float(data["importance"]),
+            scope=normalise_scope(data["scope"]),
             categories=data["categories"],
             store=data["store"],
             trace={

@@ -126,7 +126,7 @@ def test_a_scope_without_a_leading_slash_is_normalised_not_refused(scope, expect
     assert determination.store is True
     assert determination.error is None
     assert determination.scope == expected
-    assert determination.trace["buddhi"]["response"]["scope"] == expected
+    assert determination.trace["buddhi"]["response"]["scope"] == scope
 
 
 def _response(content: object, finish_reason: object = "stop") -> dict:
