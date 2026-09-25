@@ -5,4 +5,7 @@
 # a recurring false positive you have checked by hand; every entry widens
 # what can reach Gemini, Jev and Chitta. There is deliberately no per-call
 # override: an agent could be talked into using it.
+# The server refuses to start if `allow` is not a list of non-empty regexes,
+# or if an entry matches the empty string (such as '^' or '.*'): it would
+# allow every finding.
 allow: []

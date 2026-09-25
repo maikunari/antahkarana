@@ -123,7 +123,7 @@ python -m src.dvarapala purge   # scrub, re-embed scrubbed text, dissolve secret
                                 # purge old dissolved rows, VACUUM, rebuild vectors, verify
 ```
 
-`purge` re-embeds scrubbed memories, so it needs `GEMINI_API_KEY`; without it, it changes nothing. Neither command can reach backups or snapshots of `data/`, or text already sent to Gemini or Jev, so rotate every credential the audit lists.
+`purge` re-embeds scrubbed memories that stay active, so it then needs `GEMINI_API_KEY`; without it, it changes nothing. Neither command can reach backups or snapshots of `data/`, or text already sent to Gemini or Jev, so rotate every credential the audit lists.
 
 It does not protect against a secret that is already in the calling agent's context, its model provider or its transcript before `remember` runs; secrets described in words or split across calls; or personal health information, which is not a pattern. Not built yet: keeping content out of debug logs, a Jev secret check on scrubbed text once Jev decides, and an optional vault.
 
@@ -131,7 +131,7 @@ It does not protect against a secret that is already in the calling agent's cont
 
 Every `remember` call writes one row to the `determinations` table in `chitta.db`: the scrubbed input text in `input_text`, the stored memory's ID in `memory_id`, and a JSON `determination` holding Gemini's model id and raw JSON answer, the Jev shadow answer, `decided_by`, the `redactions` the secrets keeper made, the `source_agent`, and the `final` outcome (stored or not, with the memory ID, scope, importance and categories after caller overrides). The whole row is scrubbed before it is written. Content refused as nothing but a secret is logged with `decided_by: "dvarapala"` and no model answers. A logging failure never fails `remember`.
 
-A refused input is logged as `[redacted: likely secret]` instead of its text when Jev's secret probability is at or above `SECRET_THRESHOLD`, or when Jev gave no answer (key unset, error or timeout), since then there is no secret signal. Stored inputs are logged as written.
+A refused input is logged as `[redacted: likely secret]` instead of its text when Jev's secret probability is at or above `SECRET_THRESHOLD`, or when Jev gave no answer (key unset, error or timeout), since then there is no secret signal. Stored inputs are logged with their scrubbed text.
 
 With `TYPESAFE_API_KEY` set, Buddhi also asks TypeSafe's Jev (`src/buddhi/jev.py`, pinned to `jev-1.13.0`) the keep-or-discard question, in parallel with Gemini. Jev sees only the memory text. Its answer (kind, per-kind probabilities, keep probability, secret probability, would-store) is logged, and **Gemini's `store` still decides**. Any Jev error, or no answer within 3 s of the call starting, is logged as `error` or `timeout` and never changes whether the memory is stored. Without the key, Jev is off.
 
