@@ -31,8 +31,7 @@ QUERY_PREFIX = "search_query: "
 class EmbeddingEngine:
     """Wraps the pinned local embedding model. Loads it on first use."""
 
-    def __init__(self, cache_dir: str | None = None) -> None:
-        self._cache_dir = cache_dir
+    def __init__(self) -> None:
         self._model = None
         self._lock = threading.Lock()
 
@@ -61,7 +60,6 @@ class EmbeddingEngine:
                     EMBEDDING_MODEL,
                     revision=EMBEDDING_REVISION,
                     allow_patterns=_MODEL_FILES,
-                    cache_dir=self._cache_dir,
                 )
                 self._model = TextEmbedding(EMBEDDING_MODEL, specific_model_path=path)
             return self._model

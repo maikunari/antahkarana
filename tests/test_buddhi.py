@@ -93,7 +93,6 @@ MALFORMED_ANSWERS = {
     "importance-bool": _answer(importance=True),
     "importance-above-1": _answer(importance=1.5),
     "importance-negative": _answer(importance=-0.1),
-    "scope-not-a-path": _answer(scope="project/x"),
     "scope-null": _answer(scope=None),
     "categories-string": _answer(categories="decision"),
     "categories-mixed": _answer(categories=["decision", 3]),
@@ -112,6 +111,22 @@ def test_a_malformed_answer_is_a_refusal(raw):
     assert determination.trace["buddhi"]["status"] == "error"
     assert determination.trace["buddhi"]["error"] == determination.error
     assert "response" not in determination.trace["buddhi"]
+
+
+@pytest.mark.parametrize(
+    ("scope", "expected"),
+    [("project/x", "/project/x"), ("  project/x \n", "/project/x"), (" /project/x ", "/project/x"), ("", "/")],
+)
+def test_a_scope_without_a_leading_slash_is_normalised_not_refused(scope, expected):
+    model = FakeOpenRouter(store=True)
+    model.raw = _answer(scope=scope)
+
+    determination = make_buddhi(model).evaluate("We chose PostgreSQL because JSONB support.")
+
+    assert determination.store is True
+    assert determination.error is None
+    assert determination.scope == expected
+    assert determination.trace["buddhi"]["response"]["scope"] == expected
 
 
 def _response(content: object, finish_reason: object = "stop") -> dict:

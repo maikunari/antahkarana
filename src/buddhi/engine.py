@@ -74,12 +74,15 @@ def parse_determination(content: object) -> dict:
     if not isinstance(data["store"], bool):
         raise BuddhiError("store is not a boolean")
     scope = data["scope"]
-    if not isinstance(scope, str) or not scope.startswith("/"):
-        raise BuddhiError("scope is not a path starting with /")
+    if not isinstance(scope, str):
+        raise BuddhiError("scope is not a string")
+    scope = scope.strip()
+    if not scope.startswith("/"):
+        scope = "/" + scope
     categories = data["categories"]
     if not isinstance(categories, list) or not all(isinstance(c, str) for c in categories):
         raise BuddhiError("categories is not a list of strings")
-    return {**data, "importance": float(importance)}
+    return {**data, "importance": float(importance), "scope": scope}
 
 
 class BuddhiEngine:
@@ -91,13 +94,11 @@ class BuddhiEngine:
         config_dir: str,
         *,
         model: str | None = None,
-        timeout: float = BUDDHI_TIMEOUT_S,
         jev: JevClient | None = None,
         transport: Transport | None = None,
     ) -> None:
         self._api_key = api_key
         self.model = model or buddhi_model()
-        self.timeout = timeout
         self._transport = transport or urllib_transport
         self._system_prompt = load_buddhi_prompt(config_dir)
         self._jev = jev
@@ -176,7 +177,7 @@ class BuddhiEngine:
         }
         started = time.monotonic()
         try:
-            status, raw = self._transport(OPENROUTER_ENDPOINT, body, headers, self.timeout)
+            status, raw = self._transport(OPENROUTER_ENDPOINT, body, headers, BUDDHI_TIMEOUT_S)
         except Exception as err:
             raise BuddhiError(f"request failed: {type(err).__name__}: {err}") from err
         latency_ms = int((time.monotonic() - started) * 1000)
