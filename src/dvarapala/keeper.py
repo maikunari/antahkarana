@@ -5,8 +5,9 @@ whether something is a secret:
 
 1. gitleaks' default rule set (vendored `gitleaks.toml`, v8.30.1, MIT), compiled
    with RE2 for Go-regex parity and linear-time matching on hostile input;
-2. a few rules for secrets written the way memories are written (prose
-   passwords, credential pairs, URL passwords), which gitleaks does not cover;
+2. a few rules gitleaks does not cover: OpenRouter keys (Buddhi's own
+   provider), and secrets written the way memories are written (prose
+   passwords, credential pairs, URL passwords);
 3. an entropy backstop for long random-looking tokens no rule named.
 
 A secret is replaced by `[secret:<rule-id>]`; the value is never logged,
@@ -42,6 +43,12 @@ MAX_IDENTIFIER_NUMBER = 8
 PLACEHOLDER = re.compile(r"\[secret:[a-z0-9-]+\]")
 
 MEMORY_RULES = [
+    {
+        # Buddhi's own provider; gitleaks v8.30.1 has no rule for its keys.
+        "id": "openrouter-api-key",
+        "regex": r"\b(sk-or-v1-[0-9a-f]{64})\b",
+        "keywords": ["sk-or-v1-"],
+    },
     {
         "id": "url-userinfo-password",
         "regex": r"[a-z][a-z0-9+.-]{1,20}://[^\s:/@]{1,64}:([^\s@/]{3,128})@[^\s/]+",

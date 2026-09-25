@@ -58,6 +58,8 @@ def positives() -> list[Sample]:
         _sample("stripe", "Friendly Fires Stripe live secret: {}", f"sk_live_{_s(99)}"),
         _sample("gemini", "GEMINI_API_KEY={} is the key the Jozu worker uses in production",
                 f"AIza{_s(35, ALNUM + '-_')}"),
+        _sample("openrouter", "Buddhi's OpenRouter key is {} until we rotate it.",
+                f"sk-or-v1-{_s(64, HEX)}"),
         _sample("slack", "Slack bot token for the ops channel is {}",
                 f"xoxb-{_s(12, string.digits)}-{_s(13, string.digits)}-{_s(24)}"),
         _sample("shopify", "Shopify admin API token for FF store: {}", f"shpat_{_s(32, HEX)}"),

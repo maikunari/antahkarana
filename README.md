@@ -1,6 +1,6 @@
 # Antaḥkaraṇa
 
-A platform-agnostic persistent memory layer for AI agents, built as a standalone MCP server. Plug it into Claude Code, OpenClaw, Cowork, or any MCP-compatible client — your knowledge persists across every tool you use. The architecture is grounded in the Vedic Antaḥkaraṇa (inner instruments of mind) framework: Buddhi (Gemini Flash) evaluates every input before Chitta (Zvec + SQLite) stores it, so memory is discriminated, not just accumulated.
+A platform-agnostic persistent memory layer for AI agents, built as a standalone MCP server. Plug it into Claude Code, OpenClaw, Cowork, or any MCP-compatible client — your knowledge persists across every tool you use. The architecture is grounded in the Vedic Antaḥkaraṇa (inner instruments of mind) framework: Buddhi (an open model on OpenRouter, DeepSeek V4.1 Flash by default) evaluates every input before Chitta (Zvec + SQLite) stores it, so memory is discriminated, not just accumulated.
 
 ## Quick Start
 
@@ -8,16 +8,20 @@ A platform-agnostic persistent memory layer for AI agents, built as a standalone
 cd antahkarana
 python3.12 -m venv .venv
 source .venv/bin/activate
-pip install mcp zvec google-genai google-re2 pyyaml python-dotenv
+pip install "mcp<2" zvec "fastembed>=0.8.1,<0.9" google-re2 pyyaml python-dotenv
 ```
 
 Create `.env`:
 
 ```
-GEMINI_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_key_here
+# Optional: the OpenRouter model id Buddhi asks (default deepseek/deepseek-v4.1-flash)
+ANTAHKARANA_BUDDHI_MODEL=
 # Optional: Jev shadow judge (see "Determination log and Jev shadow mode")
 TYPESAFE_API_KEY=
 ```
+
+Buddhi sends the (scrubbed) memory text to OpenRouter's chat completions API with a strict JSON schema, so `OPENROUTER_API_KEY` is the only key it needs. Embeddings run locally: the pinned `nomic-ai/nomic-embed-text-v1.5` model (768 dims, Apache-2.0, ONNX Runtime via fastembed) needs no key, and no text leaves the machine to be embedded. The first `remember` or `recall` downloads the model files (about 550 MB) into the Hugging Face cache; after that it works offline.
 
 Run the server directly:
 
@@ -31,6 +35,8 @@ Run the tests (no network or API keys needed):
 pip install pytest
 python -m pytest
 ```
+
+Live checks are opt-in: they run only with `OPENROUTER_API_KEY` (Buddhi), `TYPESAFE_API_KEY` (Jev) or `ANTAHKARANA_LIVE_EMBEDDINGS=1` (downloads the embedding model) set.
 
 ## Connecting to Claude Code
 
@@ -73,7 +79,7 @@ Store a memory through the Buddhi evaluation pipeline.
 | `importance` | float | no | Override Buddhi's importance assessment (0.0–1.0) |
 | `source_agent` | string | no | Which agent is storing this (`claude-code`, `openclaw`, etc.) |
 
-Returns: `memory_id`, `scope`, `importance`, `categories`, or `stored: false` if Buddhi determines the content is too trivial. Secrets are removed from every input first (see "Secrets keeper"): when any were, the result adds `redactions` (field, kind and count, never the value) and a `note`. Content that is nothing but a secret returns `stored: false` with `reason: "secret_only"` and reaches no model.
+Returns: `memory_id`, `scope`, `importance`, `categories`, or `stored: false` if Buddhi determines the content is too trivial. If Buddhi's model call fails (no key, network, HTTP error, timeout, or an answer that does not match the schema exactly), nothing is stored and the result is `stored: false` with `reason: "buddhi_error"` and a `note` saying why. Secrets are removed from every input first (see "Secrets keeper"): when any were, the result adds `redactions` (field, kind and count, never the value) and a `note`. Content that is nothing but a secret returns `stored: false` with `reason: "secret_only"` and reaches no model.
 
 ### `recall`
 
@@ -108,7 +114,7 @@ Latent keeps the memory's text and vector, since it is reversible. Dissolved pur
 
 `src/dvarapala/` keeps API keys, tokens, passwords and other credentials out of Antaḥkaraṇa. It runs first in `remember` and `recall`, before Buddhi, Jev, the embedder or Chitta see anything, and replaces each secret with a typed placeholder such as `[secret:stripe-access-token]`. The rest of the memory is still stored. The value is never stored, logged, returned or sent to a model.
 
-- **Detection is local.** gitleaks' default rules (`src/dvarapala/gitleaks.toml`, v8.30.1, MIT, compiled with RE2), three rules for secrets written in prose (`password is …`, `login … is user / pass`, passwords in URLs), and an entropy backstop for long random-looking tokens.
+- **Detection is local.** gitleaks' default rules (`src/dvarapala/gitleaks.toml`, v8.30.1, MIT, compiled with RE2), an OpenRouter key rule (gitleaks has none), three rules for secrets written in prose (`password is …`, `login … is user / pass`, passwords in URLs), and an entropy backstop for long random-looking tokens.
 - **Where it applies.** `remember` content, the `scope` and `source_agent` overrides (a secret there drops the override), the `recall` query, and Buddhi's own `scope` and `categories` in case the model echoes a secret. The whole determination row is scrubbed before it is logged.
 - **Fails closed.** If the keeper cannot load or run, `remember` and `recall` refuse and nothing is sent anywhere. The server does not start without it.
 - **Write guard.** Chitta checks every text it writes and raises `SecretInWrite` instead of storing a secret, so a future write path that forgets to scrub fails loudly.
@@ -123,24 +129,24 @@ python -m src.dvarapala purge   # scrub, re-embed scrubbed text, dissolve secret
                                 # purge old dissolved rows, VACUUM, rebuild vectors, verify
 ```
 
-`purge` re-embeds scrubbed memories that stay active, so it then needs `GEMINI_API_KEY`; without it, it changes nothing. Neither command can reach backups or snapshots of `data/`, or text already sent to Gemini or Jev, so rotate every credential the audit lists.
+`purge` re-embeds scrubbed memories that stay active with the local embedding model; if the model cannot load, it changes nothing. Neither command can reach backups or snapshots of `data/`, or text already sent to Buddhi's model or Jev, so rotate every credential the audit lists.
 
 It does not protect against a secret that is already in the calling agent's context, its model provider or its transcript before `remember` runs; secrets described in words or split across calls; or personal health information, which is not a pattern. Not built yet: keeping content out of debug logs, a Jev secret check on scrubbed text once Jev decides, and an optional vault.
 
 ## Determination log and Jev shadow mode
 
-Every `remember` call writes one row to the `determinations` table in `chitta.db`: the scrubbed input text in `input_text`, the stored memory's ID in `memory_id`, and a JSON `determination` holding Gemini's model id and raw JSON answer, the Jev shadow answer, `decided_by`, the `redactions` the secrets keeper made, the `source_agent`, and the `final` outcome (stored or not, with the memory ID, scope, importance and categories after caller overrides). The whole row is scrubbed before it is written. Content refused as nothing but a secret is logged with `decided_by: "dvarapala"` and no model answers. A logging failure never fails `remember`.
+Every `remember` call writes one row to the `determinations` table in `chitta.db`: the scrubbed input text in `input_text`, the stored memory's ID in `memory_id`, and a JSON `determination` holding Buddhi's answer under `buddhi` (`provider`, the requested `model`, the served `model_version`, `served_by`, `latency_ms`, `status` and the raw JSON `response`, or the `error` when the call failed), the Jev shadow answer, `decided_by`, the `redactions` the secrets keeper made, the `source_agent`, and the `final` outcome (stored or not, with the memory ID, scope, importance and categories after caller overrides). The whole row is scrubbed before it is written. `decided_by` is `"buddhi"`, or `"dvarapala"` for content refused as nothing but a secret, which is logged with no model answers. A logging failure never fails `remember`.
 
 A refused input is logged as `[redacted: likely secret]` instead of its text when Jev's secret probability is at or above `SECRET_THRESHOLD`, or when Jev gave no answer (key unset, error or timeout), since then there is no secret signal. Stored inputs are logged with their scrubbed text.
 
-With `TYPESAFE_API_KEY` set, Buddhi also asks TypeSafe's Jev (`src/buddhi/jev.py`, pinned to `jev-1.13.0`) the keep-or-discard question, in parallel with Gemini. Jev sees only the memory text. Its answer (kind, per-kind probabilities, keep probability, secret probability, would-store) is logged, and **Gemini's `store` still decides**. Any Jev error, or no answer within 3 s of the call starting, is logged as `error` or `timeout` and never changes whether the memory is stored. Without the key, Jev is off.
+With `TYPESAFE_API_KEY` set, Buddhi also asks TypeSafe's Jev (`src/buddhi/jev.py`, pinned to `jev-1.13.0`) the keep-or-discard question, in parallel with Buddhi's model. Jev sees only the memory text. Its answer (kind, per-kind probabilities, keep probability, secret probability, would-store) is logged, and **Buddhi's `store` still decides**. Any Jev error, or no answer within 3 s of the call starting, is logged as `error` or `timeout` and never changes whether the memory is stored. Without the key, Jev is off.
 
 Inspect disagreements:
 
 ```bash
 sqlite3 data/chitta.db "SELECT input_text, determination FROM determinations
   WHERE json_extract(determination, '$.jev.status') = 'ok'
-    AND json_extract(determination, '$.jev.store') != json_extract(determination, '$.gemini.response.store')"
+    AND json_extract(determination, '$.jev.store') != json_extract(determination, '$.buddhi.response.store')"
 ```
 
 ## Project Structure
@@ -162,10 +168,10 @@ antahkarana/
 │   │   ├── schema.py           # SQLite DDL + init
 │   │   └── store.py            # Zvec + SQLite unified store
 │   ├── buddhi/
-│   │   ├── engine.py           # Gemini Flash determination
+│   │   ├── engine.py           # Buddhi determination via OpenRouter
 │   │   ├── prompts.py          # Prompt loading from YAML
 │   │   ├── jev.py              # Jev keep-or-discard judge (shadow mode)
-│   │   └── embeddings.py       # Gemini embedding wrapper (768-dim)
+│   │   └── embeddings.py       # Local embedding model (768-dim)
 │   ├── manas/
 │   │   └── tools.py            # remember, recall, forget logic
 │   ├── guna/
@@ -183,7 +189,7 @@ antahkarana/
 ## Phases
 
 **Phase 1 — Core Loop (current)**
-Remember + recall + forget. Buddhi evaluates importance/scope/categories via Gemini Flash. Chitta stores in Zvec (semantic vectors) + SQLite (metadata) with dual-write transactional safety.
+Remember + recall + forget. Buddhi evaluates importance/scope/categories via an open model on OpenRouter. Chitta stores in Zvec (semantic vectors) + SQLite (metadata) with dual-write transactional safety.
 
 **Phase 2 — Buddhi Intelligence**
 Consolidation on save, atomic fact extraction, contradiction detection, smarter scope inference.
@@ -201,9 +207,9 @@ Feedback loop. User corrections stored as meta-vāsanās. Buddhi's determination
 
 | Component | Technology |
 |-----------|-----------|
-| Reasoning (Buddhi) | Gemini 2.5 Flash |
+| Reasoning (Buddhi) | DeepSeek V4.1 Flash (`deepseek/deepseek-v4.1-flash`) on OpenRouter; `ANTAHKARANA_BUDDHI_MODEL` overrides |
 | Keep-or-discard shadow judge | TypeSafe Jev (`jev-1.13.0`), optional |
-| Embeddings | `gemini-embedding-001` @ 768 dims |
+| Embeddings | `nomic-ai/nomic-embed-text-v1.5` @ 768 dims, local via fastembed (ONNX Runtime), pinned revision |
 | Vector store (Chitta) | Zvec |
 | Structured store | SQLite |
 | MCP framework | `mcp` Python SDK (FastMCP) |

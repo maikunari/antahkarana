@@ -13,6 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from src.buddhi.embeddings import EmbeddingEngine
 from src.dvarapala.audit import EmbedderRequired, audit, purge
 from src.dvarapala.keeper import Keeper
 
@@ -46,13 +47,15 @@ def main(argv: list[str] | None = None) -> int:
             print("Run `python -m src.dvarapala purge` with the server stopped to remove them.")
         return 0 if report.clean else 1
 
-    embed = None
-    if os.environ.get("GEMINI_API_KEY"):
-        from src.buddhi.embeddings import EmbeddingEngine
-
-        embed = EmbeddingEngine(api_key=os.environ["GEMINI_API_KEY"]).embed
+    # Loaded before any write, so a model that cannot load changes nothing.
+    embeddings = EmbeddingEngine()
     try:
-        before, after, files = purge(args.data_dir, keeper, embed)
+        embeddings.load()
+    except Exception as err:
+        print(f"Nothing changed: could not load the embedding model: {type(err).__name__}: {err}")
+        return 2
+    try:
+        before, after, files = purge(args.data_dir, keeper, embeddings.embed)
     except EmbedderRequired as err:
         print(f"Nothing changed: {err}")
         return 2

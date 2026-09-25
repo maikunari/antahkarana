@@ -1,7 +1,7 @@
 """Jev shadow judge — TypeSafe's System One model on the keep-or-discard call.
 
-Shadow mode only: Jev's answer is logged next to Gemini's and never acted on.
-Gemini's `store` stays authoritative until the logged disagreements are reviewed.
+Shadow mode only: Jev's answer is logged next to Buddhi's model's and never acted on.
+Buddhi's `store` stays authoritative until the logged disagreements are reviewed.
 
 Jev sees only the memory text. It never writes scope, categories, or summaries.
 """
@@ -79,7 +79,7 @@ class JevJudgment:
         return asdict(self)
 
 
-def _urllib_transport(
+def urllib_transport(
     url: str, body: bytes, headers: dict[str, str], timeout: float
 ) -> tuple[int, bytes]:
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
@@ -112,7 +112,7 @@ class JevClient:
         self._api_key = api_key
         self.model = model
         self.timeout = timeout
-        self._transport = transport or _urllib_transport
+        self._transport = transport or urllib_transport
 
     def request_body(self, content: str) -> dict:
         return {"model": self.model, "state": {"memory": content}, "questions": QUESTIONS}

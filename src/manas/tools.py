@@ -28,6 +28,9 @@ SECRET_ONLY_NOTE = (
     "Nothing but a secret was left to remember. Nothing was stored or sent to any model."
 )
 KEEPER_ERROR_NOTE = "The secrets keeper failed, so nothing was stored or sent to any model."
+BUDDHI_ERROR_NOTE = (
+    "Buddhi could not judge this content ({error}), so nothing was stored. Try again later."
+)
 
 
 def remember(
@@ -85,6 +88,13 @@ def remember(
 
     if not determination.store:
         logged_input = REDACTED_SECRET if _likely_secret(determination) else content
+        if determination.error is not None:
+            final = {"store": False, "reason": "buddhi_error"}
+            _log_determination(chitta, keeper, logged_input, determination, source_agent, final)
+            note = keeper.scrub(BUDDHI_ERROR_NOTE.format(error=determination.error)).text
+            result = _with_redactions({"stored": False, "reason": "buddhi_error"}, redactions)
+            result["note"] = " ".join(n for n in (note, result.get("note")) if n)
+            return result
         final = {"store": False}
         _log_determination(chitta, keeper, logged_input, determination, source_agent, final)
         return _with_redactions(
@@ -213,7 +223,7 @@ def recall(
         logger.error("Secrets keeper failed; refusing recall")
         return {"count": 0, "memories": [], "error": "keeper_error", "note": KEEPER_ERROR_NOTE}
     query = scrubbed.text
-    query_embedding = embeddings.embed(query)
+    query_embedding = embeddings.embed_query(query)
 
     results = chitta.search(
         query_embedding=query_embedding,

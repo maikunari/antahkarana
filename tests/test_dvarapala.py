@@ -24,8 +24,8 @@ def keeper() -> Keeper:
 
 
 def test_every_rule_compiles(keeper):
-    # 221 gitleaks regex rules, minus 4 scoped to file paths, plus 3 memory rules
-    assert keeper.rule_count == 220
+    # 221 gitleaks regex rules, minus 4 scoped to file paths, plus 4 memory rules
+    assert keeper.rule_count == 221
 
 
 @pytest.mark.parametrize("sample", POSITIVES, ids=lambda s: s.label)
@@ -59,7 +59,7 @@ def test_scrubbed_text_scans_clean(keeper, sample):
 def test_secret_only_means_too_few_words_are_left(keeper):
     bare = next(s for s in POSITIVES if s.label == "stripe").values[0]
 
-    assert keeper.scrub(f"GEMINI_API_KEY={bare}").secret_only()
+    assert keeper.scrub(f"OPENROUTER_API_KEY={bare}").secret_only()
     assert keeper.scrub(bare).secret_only()
     assert not keeper.scrub(f"Use {bare} to take payments in the FF checkout").secret_only()
     assert not keeper.scrub("ok").secret_only()  # no secret, nothing to refuse
@@ -75,12 +75,12 @@ def test_kinds_name_the_rule_but_never_the_value(keeper):
 
 def test_scrub_value_reaches_nested_strings(keeper):
     sample = POSITIVES[0]
-    value = {"gemini": {"response": {"scope": sample.text, "n": 3}}, "list": [sample.text, None]}
+    value = {"buddhi": {"response": {"scope": sample.text, "n": 3}}, "list": [sample.text, None]}
 
     scrubbed, findings = keeper.scrub_value(value)
 
     assert len(findings) == 2
-    assert scrubbed["gemini"]["response"]["n"] == 3
+    assert scrubbed["buddhi"]["response"]["n"] == 3
     assert scrubbed["list"][1] is None
     assert sample.values[0] not in str(scrubbed)
 

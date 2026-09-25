@@ -1,16 +1,15 @@
-"""Shared fakes: Gemini, Jev transport, embeddings, and a SQLite-only Chitta."""
+"""Shared fakes: OpenRouter and Jev transports, embeddings, and a SQLite-only Chitta."""
 
 from __future__ import annotations
 
 import json
 import time
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import yaml
 
-from src.buddhi.engine import BuddhiEngine
+from src.buddhi.engine import DEFAULT_BUDDHI_MODEL, BuddhiEngine
 from src.buddhi.jev import KEEP_KINDS, KIND_CRITERIA, JevClient
 from src.chitta.schema import init_db
 from src.chitta.store import ChittaStore
@@ -29,10 +28,21 @@ def load_examples() -> list[dict]:
     ]
 
 
-class FakeGemini:
-    """Stands in for genai.Client; answers every call with one fixed determination."""
+class FakeOpenRouter:
+    """Stands in for the OpenRouter transport; answers every call with one fixed determination.
 
-    def __init__(self, store: bool, *, delay: float = 0.0, error: Exception | None = None):
+    `answer` is the determination JSON; `raw` overrides the whole message content
+    and `response` the whole response body, for malformed-output tests.
+    """
+
+    def __init__(
+        self,
+        store: bool,
+        *,
+        delay: float = 0.0,
+        error: Exception | None = None,
+        status: int = 200,
+    ):
         self.answer = {
             "store": store,
             "importance": 0.8 if store else 0.1,
@@ -41,13 +51,40 @@ class FakeGemini:
         }
         self.delay = delay
         self.error = error
-        self.models = SimpleNamespace(generate_content=self._generate)
+        self.status = status
+        self.raw: str | None = None
+        self.response: object | None = None
+        self.calls: list[dict] = []
 
-    def _generate(self, **_kwargs):
+    @property
+    def contents(self) -> list[str]:
+        """The user message of every call: the text the model saw."""
+        return [c["body"]["messages"][-1]["content"] for c in self.calls]
+
+    def __call__(self, url, body, headers, timeout):
+        self.calls.append(
+            {"url": url, "body": json.loads(body), "headers": headers, "timeout": timeout}
+        )
         time.sleep(self.delay)
         if self.error:
             raise self.error
-        return SimpleNamespace(text=json.dumps(self.answer), model_version="gemini-2.5-flash-test")
+        if self.response is not None:
+            body = self.response
+        else:
+            content = self.raw if self.raw is not None else json.dumps(self.answer)
+            body = {
+                "id": "gen-test",
+                "model": "deepseek/deepseek-v4.1-flash-20260910",
+                "provider": "TestProvider",
+                "choices": [
+                    {
+                        "index": 0,
+                        "finish_reason": "stop",
+                        "message": {"role": "assistant", "content": content},
+                    }
+                ],
+            }
+        return self.status, body if isinstance(body, bytes) else json.dumps(body).encode()
 
 
 def jev_answer(kind: str, *, secret: float = 0.02, model: str = "jev-1.13.0") -> dict:
@@ -98,12 +135,21 @@ def make_jev(transport: FakeTransport, *, timeout: float = 1.0) -> JevClient:
     return JevClient(TEST_KEY, timeout=timeout, transport=transport)
 
 
-def make_buddhi(gemini: FakeGemini, jev: JevClient | None = None) -> BuddhiEngine:
-    return BuddhiEngine(api_key="", config_dir=str(CONFIG_DIR), jev=jev, gemini_client=gemini)
+def make_buddhi(model: FakeOpenRouter, jev: JevClient | None = None) -> BuddhiEngine:
+    return BuddhiEngine(
+        api_key=TEST_KEY,
+        config_dir=str(CONFIG_DIR),
+        model=DEFAULT_BUDDHI_MODEL,
+        jev=jev,
+        transport=model,
+    )
 
 
 class FakeEmbeddings:
     def embed(self, _text: str) -> list[float]:
+        return [0.0] * 768
+
+    def embed_query(self, _text: str) -> list[float]:
         return [0.0] * 768
 
 

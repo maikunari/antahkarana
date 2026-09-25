@@ -8,7 +8,7 @@ import uuid
 
 import pytest
 
-from conftest import FakeEmbeddings, FakeGemini, determination_rows, make_buddhi
+from conftest import FakeEmbeddings, FakeOpenRouter, determination_rows, make_buddhi
 from src.chitta.schema import init_db
 from src.chitta.store import DISSOLVED_CONTENT, ChittaStore
 from src.manas import tools
@@ -29,7 +29,7 @@ def _remember(store, content, scope=None):
     result = tools.remember(
         content,
         chitta=store,
-        buddhi=make_buddhi(FakeGemini(store=True)),
+        buddhi=make_buddhi(FakeOpenRouter(store=True)),
         embeddings=FakeEmbeddings(),
         scope=scope,
     )

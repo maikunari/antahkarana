@@ -6,7 +6,10 @@ requires-python = ">=3.12"
 dependencies = [
     "mcp>=1.25,<2",
     "zvec",
-    "google-genai",
+    # Local ONNX embeddings; the model itself is pinned in src/buddhi/embeddings.py
+    "fastembed>=0.8.1,<0.9",
+    "huggingface-hub",
+    "numpy",
     "google-re2",
     "pyyaml",
     "python-dotenv",

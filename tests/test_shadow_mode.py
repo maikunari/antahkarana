@@ -1,4 +1,4 @@
-"""Shadow mode: Jev's answer is logged, Gemini's `store` decides, and Jev never blocks remember."""
+"""Shadow mode: Jev's answer is logged, Buddhi's `store` decides, and Jev never blocks remember."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 
 from conftest import (
     FakeEmbeddings,
-    FakeGemini,
+    FakeOpenRouter,
     FakeTransport,
     determination_rows,
     jev_answer,
@@ -44,23 +44,23 @@ EXPECTED_STATUS = {"off": "off", "agrees": "ok", "disagrees": "ok", "errors": "e
 @pytest.mark.parametrize("behaviour", list(EXPECTED_STATUS))
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda ex: ex["content"][:40])
 def test_shadow_mode_does_not_change_the_stored_outcome(chitta, example, behaviour):
-    gemini = FakeGemini(store=example["store"])
+    model = FakeOpenRouter(store=example["store"])
     jev = _jev(behaviour, example)
 
     result = tools.remember(
         example["content"],
         chitta=chitta,
-        buddhi=make_buddhi(gemini, jev),
+        buddhi=make_buddhi(model, jev),
         embeddings=FakeEmbeddings(),
         source_agent="pytest",
     )
 
-    # Gemini's answer alone decides, whatever Jev said
+    # Buddhi's answer alone decides, whatever Jev said
     assert result["stored"] is example["store"]
     assert len(chitta.stored) == (1 if example["store"] else 0)
     if example["store"]:
-        assert result["scope"] == gemini.answer["scope"]
-        assert result["categories"] == gemini.answer["categories"]
+        assert result["scope"] == model.answer["scope"]
+        assert result["categories"] == model.answer["categories"]
     else:
         assert result["reason"] == "Buddhi determined this content is too trivial to store."
 
@@ -70,10 +70,10 @@ def test_shadow_mode_does_not_change_the_stored_outcome(chitta, example, behavio
         assert row["input_text"] == example["content"]
     else:
         assert row["input_text"] == "[redacted: likely secret]"
-    assert row["decided_by"] == "gemini"
+    assert row["decided_by"] == "buddhi"
     assert row["source_agent"] == "pytest"
-    assert row["gemini"]["model"] == "gemini-2.5-flash"
-    assert row["gemini"]["response"] == gemini.answer
+    assert row["buddhi"]["model"] == "deepseek/deepseek-v4.1-flash"
+    assert row["buddhi"]["response"] == model.answer
     assert row["final"]["store"] is example["store"]
     if example["store"]:
         assert row["final"]["memory_id"] == result["memory_id"]
@@ -90,12 +90,12 @@ def test_shadow_mode_does_not_change_the_stored_outcome(chitta, example, behavio
 
 def test_a_refused_likely_secret_is_logged_without_its_text(chitta):
     secret = "The prod API key is sk-live-4f9a2b7c1d8e"
-    gemini = FakeGemini(store=False)
+    model = FakeOpenRouter(store=False)
 
     result = tools.remember(
         secret,
         chitta=chitta,
-        buddhi=make_buddhi(gemini, make_jev(FakeTransport(jev_answer("durable_fact", secret=0.97)))),
+        buddhi=make_buddhi(model, make_jev(FakeTransport(jev_answer("durable_fact", secret=0.97)))),
         embeddings=FakeEmbeddings(),
         source_agent="pytest",
     )
@@ -105,8 +105,8 @@ def test_a_refused_likely_secret_is_logged_without_its_text(chitta):
     (row,) = determination_rows(chitta)
     assert row["input_text"] == "[redacted: likely secret]"
     assert row["final"] == {"store": False}
-    assert row["gemini"]["model"] == "gemini-2.5-flash"
-    assert row["gemini"]["response"] == gemini.answer
+    assert row["buddhi"]["model"] == "deepseek/deepseek-v4.1-flash"
+    assert row["buddhi"]["response"] == model.answer
     assert row["jev"]["model"] == "jev-1.13.0"
     assert row["jev"]["secret_probability"] == 0.97
     assert row["jev"]["store"] is False
@@ -117,12 +117,12 @@ def test_a_refused_likely_secret_is_logged_without_its_text(chitta):
 @pytest.mark.parametrize("behaviour", ["off", "errors", "times-out"])
 def test_a_refused_input_without_a_jev_answer_is_logged_without_its_text(chitta, behaviour):
     secret = "The prod API key is sk-live-4f9a2b7c1d8e"
-    gemini = FakeGemini(store=False)
+    model = FakeOpenRouter(store=False)
 
     result = tools.remember(
         secret,
         chitta=chitta,
-        buddhi=make_buddhi(gemini, _jev(behaviour, {"kind": "durable_fact", "store": False})),
+        buddhi=make_buddhi(model, _jev(behaviour, {"kind": "durable_fact", "store": False})),
         embeddings=FakeEmbeddings(),
         source_agent="pytest",
     )
@@ -131,7 +131,7 @@ def test_a_refused_input_without_a_jev_answer_is_logged_without_its_text(chitta,
     (row,) = determination_rows(chitta)
     assert row["input_text"] == "[redacted: likely secret]"
     assert row["final"] == {"store": False}
-    assert row["gemini"]["response"] == gemini.answer
+    assert row["buddhi"]["response"] == model.answer
     assert row["jev"]["status"] == EXPECTED_STATUS[behaviour]
     raw_rows = chitta._db.execute("SELECT * FROM determinations").fetchall()
     assert all("sk-live-4f9a2b7c1d8e" not in str(value) for r in raw_rows for value in tuple(r))
@@ -141,7 +141,7 @@ def test_overrides_apply_and_are_logged_as_the_final_decision(chitta):
     tools.remember(
         "We chose PostgreSQL because JSONB support.",
         chitta=chitta,
-        buddhi=make_buddhi(FakeGemini(store=True), make_jev(FakeTransport(jev_answer("process")))),
+        buddhi=make_buddhi(FakeOpenRouter(store=True), make_jev(FakeTransport(jev_answer("process")))),
         embeddings=FakeEmbeddings(),
         scope="/project/override",
         importance=0.3,
@@ -150,12 +150,12 @@ def test_overrides_apply_and_are_logged_as_the_final_decision(chitta):
     (row,) = determination_rows(chitta)
     assert row["final"]["scope"] == "/project/override"
     assert row["final"]["importance"] == 0.3
-    assert row["gemini"]["response"]["scope"] == "/project/test"
+    assert row["buddhi"]["response"]["scope"] == "/project/test"
 
 
 def test_slow_jev_adds_no_more_than_its_timeout():
     buddhi = make_buddhi(
-        FakeGemini(store=True),
+        FakeOpenRouter(store=True),
         make_jev(FakeTransport(jev_answer("decision"), delay=2.0), timeout=0.2),
     )
 
@@ -168,9 +168,9 @@ def test_slow_jev_adds_no_more_than_its_timeout():
     assert elapsed < 0.6
 
 
-def test_jev_timeout_is_counted_from_the_start_so_a_slow_gemini_absorbs_it():
+def test_jev_timeout_is_counted_from_the_start_so_a_slow_buddhi_absorbs_it():
     buddhi = make_buddhi(
-        FakeGemini(store=True, delay=0.4),
+        FakeOpenRouter(store=True, delay=0.4),
         make_jev(FakeTransport(jev_answer("decision"), delay=2.0), timeout=0.2),
     )
 
@@ -178,12 +178,12 @@ def test_jev_timeout_is_counted_from_the_start_so_a_slow_gemini_absorbs_it():
     buddhi.evaluate("We chose PostgreSQL because JSONB support.")
     elapsed = time.monotonic() - started
 
-    assert elapsed < 0.4 + 0.15  # Gemini's time, with no Jev wait on top
+    assert elapsed < 0.4 + 0.15  # Buddhi's time, with no Jev wait on top
 
 
-def test_jev_runs_alongside_gemini():
+def test_jev_runs_alongside_buddhi():
     buddhi = make_buddhi(
-        FakeGemini(store=True, delay=0.3),
+        FakeOpenRouter(store=True, delay=0.3),
         make_jev(FakeTransport(jev_answer("decision"), delay=0.3), timeout=1.0),
     )
 
@@ -202,7 +202,7 @@ def test_unexpected_jev_exception_falls_back(chitta, monkeypatch):
     result = tools.remember(
         "We chose PostgreSQL because JSONB support.",
         chitta=chitta,
-        buddhi=make_buddhi(FakeGemini(store=True), jev),
+        buddhi=make_buddhi(FakeOpenRouter(store=True), jev),
         embeddings=FakeEmbeddings(),
     )
 
@@ -220,7 +220,7 @@ def test_a_logging_failure_does_not_block_remember(chitta, monkeypatch):
     result = tools.remember(
         "We chose PostgreSQL because JSONB support.",
         chitta=chitta,
-        buddhi=make_buddhi(FakeGemini(store=True)),
+        buddhi=make_buddhi(FakeOpenRouter(store=True)),
         embeddings=FakeEmbeddings(),
     )
 
@@ -238,7 +238,7 @@ def test_a_failed_store_is_logged_and_still_raised(chitta, monkeypatch):
         tools.remember(
             "We chose PostgreSQL because JSONB support.",
             chitta=chitta,
-            buddhi=make_buddhi(FakeGemini(store=True)),
+            buddhi=make_buddhi(FakeOpenRouter(store=True)),
             embeddings=FakeEmbeddings(),
         )
 
@@ -246,17 +246,30 @@ def test_a_failed_store_is_logged_and_still_raised(chitta, monkeypatch):
     assert row["final"] == {"store": False, "error": "RuntimeError: zvec write failed"}
 
 
-def test_a_gemini_failure_still_fails_remember(chitta):
+def test_a_buddhi_failure_refuses_remember_and_logs_why(chitta):
     buddhi = make_buddhi(
-        FakeGemini(store=True, error=RuntimeError("gemini down")),
+        FakeOpenRouter(store=True, error=RuntimeError("model down")),
         make_jev(FakeTransport(jev_answer("decision"))),
     )
 
-    with pytest.raises(RuntimeError, match="gemini down"):
-        tools.remember(
-            "We chose PostgreSQL because JSONB support.",
-            chitta=chitta,
-            buddhi=buddhi,
-            embeddings=FakeEmbeddings(),
-        )
+    result = tools.remember(
+        "We chose PostgreSQL because JSONB support.",
+        chitta=chitta,
+        buddhi=buddhi,
+        embeddings=FakeEmbeddings(),
+        source_agent="pytest",
+    )
+
+    assert result["stored"] is False
+    assert result["reason"] == "buddhi_error"
+    assert "model down" in result["note"]
     assert chitta.stored == []
+    (row,) = determination_rows(chitta)
+    assert row["decided_by"] == "buddhi"
+    assert row["buddhi"]["status"] == "error"
+    assert "model down" in row["buddhi"]["error"]
+    assert "response" not in row["buddhi"]
+    assert row["final"] == {"store": False, "reason": "buddhi_error"}
+    # Jev's shadow answer is still logged, and never stores anything on its own
+    assert row["jev"]["status"] == "ok" and row["jev"]["store"] is True
+    assert row["input_text"] == "We chose PostgreSQL because JSONB support."
