@@ -40,23 +40,46 @@ Live checks are opt-in: they run only with `OPENROUTER_API_KEY` (Buddhi), `TYPES
 
 ## Connecting to Claude Code
 
-Add to `~/.claude/claude_code_config.json`:
+Register the server with `claude mcp add`. It has no working-directory setting, so give the install's `.env` absolute paths (`ANTAHKARANA_DATA_DIR=/path/to/antahkarana/data`, `ANTAHKARANA_CONFIG_DIR=/path/to/antahkarana/config`) and set `PYTHONPATH` so `python -m src` imports from any directory. The server reads `.env` from the install directory wherever it is started, so the keys stay there.
 
-```json
-{
-  "mcpServers": {
-    "antahkarana": {
-      "command": "/path/to/antahkarana/.venv/bin/python",
-      "args": ["-m", "src"],
-      "cwd": "/path/to/antahkarana"
-    }
-  }
-}
+```bash
+claude mcp add --scope user antahkarana \
+  -e PYTHONPATH=/path/to/antahkarana \
+  -- /path/to/antahkarana/.venv/bin/python -m src
 ```
+
+Check it with `claude mcp get antahkarana`, or `/mcp` in a session.
+
+Under stdio each Claude Code session starts its own server, and the Zvec vector store allows one open writer, so a second concurrent session fails to connect. To use Antaḥkaraṇa from several sessions at once, run the shared server below instead.
+
+## Running a shared server
+
+Set `ANTAHKARANA_TRANSPORT=http` and the server runs once over MCP streamable HTTP at `http://ANTAHKARANA_HOST:ANTAHKARANA_PORT/mcp` (defaults `127.0.0.1` and `8799`); every client on the machine connects to that one process. stdio stays the default.
+
+```bash
+ANTAHKARANA_TRANSPORT=http ANTAHKARANA_PORT=8799 python -m src
+```
+
+To keep it running, install it as a systemd user service. [`contrib/antahkarana.service`](contrib/antahkarana.service) is an example for an install at `~/.local/share/antahkarana/app`; edit its paths and port, then:
+
+```bash
+cp contrib/antahkarana.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now antahkarana
+journalctl --user -u antahkarana -f   # logs
+```
+
+Then register Claude Code against the URL instead of the command (remove a stdio registration first with `claude mcp remove antahkarana -s user`):
+
+```bash
+claude mcp add --scope user --transport http antahkarana http://127.0.0.1:8799/mcp
+```
+
+The HTTP endpoint has no authentication: any process on the machine that can reach the port can read and write memories, so keep it on `127.0.0.1`. Stop the service before running `python -m src.dvarapala audit` or `purge`, which need the store to themselves.
 
 ## Connecting to OpenClaw
 
-Add as an MCP tool source. The server uses stdio transport — point your MCP client at the same command:
+Add as an MCP tool source: point your MCP client at the same stdio command, or at the shared server's URL (see "Running a shared server"):
 
 ```
 command: /path/to/antahkarana/.venv/bin/python
@@ -64,7 +87,7 @@ args: ["-m", "src"]
 cwd: /path/to/antahkarana
 ```
 
-Any MCP-compatible client can connect the same way.
+Any MCP-compatible client can connect the same way. A client with no `cwd` setting needs the absolute `.env` paths and `PYTHONPATH` described for Claude Code.
 
 ## Tools
 
@@ -159,6 +182,7 @@ antahkarana/
 │   └── ahamkara.yaml           # Identity config (Phase 4)
 ├── src/
 │   ├── server.py               # MCP server entry point (Prāṇa)
+│   ├── transport.py            # stdio or shared streamable-HTTP settings
 │   ├── dvarapala/
 │   │   ├── keeper.py           # Secrets keeper: detect and scrub
 │   │   ├── audit.py            # Find and purge secrets already stored
@@ -180,6 +204,8 @@ antahkarana/
 │   │   └── identity.py         # stub (Phase 4)
 │   └── adhyavasaya/
 │       └── feedback.py         # stub (Phase 5)
+├── contrib/
+│   └── antahkarana.service     # Example systemd user unit for the shared server
 ├── tests/                      # pytest; fixtures/buddhi_examples.yaml holds kept/refused examples
 └── data/                       # Runtime data (gitignored)
     ├── chitta.db               # SQLite
@@ -213,4 +239,4 @@ Feedback loop. User corrections stored as meta-vāsanās. Buddhi's determination
 | Vector store (Chitta) | Zvec |
 | Structured store | SQLite |
 | MCP framework | `mcp` Python SDK (FastMCP) |
-| Transport | stdio |
+| Transport | stdio (default) or streamable HTTP (`ANTAHKARANA_TRANSPORT=http`) |
