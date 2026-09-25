@@ -68,7 +68,7 @@ MEMORY_RULES = [
         "id": "prose-credential-pair",
         "regex": (
             r"(?i)\b(?:login|credentials?|creds)\b[^\n]{0,60}?(?:\bis|:)"
-            r"\s+[^\s/]{1,64}(?:\s+/\s+(\S{6,128})|/([^\s/]{6,128})(?:\s|$))"
+            r"\s+[^\s/]{1,64}(?:\s+/\s+(\S{6,128})|\s*/\s*([^\s/]{6,128})(?:\s|$))"
         ),
         "keywords": ["login", "cred"],
         "allowlists": [
