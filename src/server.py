@@ -19,7 +19,7 @@ from src.buddhi.jev import JevClient
 from src.chitta.store import ChittaStore
 from src.dvarapala.keeper import Keeper
 from src.manas import tools
-from src.transport import load_transport_settings
+from src.transport import HOST, load_transport_settings
 
 # Load environment from the repo's .env whatever the working directory, so Claude Code
 # and a service manager can start the server from anywhere. Real environment wins.
@@ -53,8 +53,8 @@ logger.info("Buddhi model: %s", buddhi.model)
 
 # Create MCP server. Host and port go in explicitly: FastMCP's own FASTMCP_HOST/FASTMCP_PORT
 # settings are overridden by its constructor defaults. Passing them here (not after) also
-# gives a localhost host FastMCP's DNS rebinding protection.
-mcp = FastMCP("antahkarana", host=TRANSPORT.host, port=TRANSPORT.port)
+# gives the localhost host FastMCP's DNS rebinding protection.
+mcp = FastMCP("antahkarana", host=HOST, port=TRANSPORT.port)
 
 
 @mcp.tool()
@@ -150,7 +150,7 @@ def main() -> None:
     if TRANSPORT.transport == "http":
         logger.info(
             "Starting Antaḥkaraṇa memory server on http://%s:%d%s",
-            TRANSPORT.host,
+            HOST,
             TRANSPORT.port,
             mcp.settings.streamable_http_path,
         )

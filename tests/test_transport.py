@@ -12,33 +12,33 @@ from pathlib import Path
 
 import pytest
 
-from src.transport import DEFAULT_HOST, DEFAULT_PORT, TransportSettings, load_transport_settings
+from src.transport import DEFAULT_PORT, TransportSettings, load_transport_settings
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_default_is_stdio():
-    assert load_transport_settings({}) == TransportSettings("stdio", DEFAULT_HOST, DEFAULT_PORT)
+    assert load_transport_settings({}) == TransportSettings("stdio", DEFAULT_PORT)
 
 
 def test_empty_values_mean_default():
-    env = {"ANTAHKARANA_TRANSPORT": "", "ANTAHKARANA_HOST": "", "ANTAHKARANA_PORT": ""}
+    env = {"ANTAHKARANA_TRANSPORT": "", "ANTAHKARANA_PORT": ""}
     assert load_transport_settings(env).transport == "stdio"
 
 
-def test_stdio_ignores_host_and_port():
-    env = {"ANTAHKARANA_HOST": "0.0.0.0", "ANTAHKARANA_PORT": "not-a-port"}
+def test_stdio_ignores_port():
+    env = {"ANTAHKARANA_TRANSPORT": "stdio", "ANTAHKARANA_PORT": "not-a-port"}
     assert load_transport_settings(env) == TransportSettings()
 
 
-def test_http_defaults_to_localhost():
+def test_http_default_port():
     settings = load_transport_settings({"ANTAHKARANA_TRANSPORT": "http"})
-    assert settings == TransportSettings("http", "127.0.0.1", DEFAULT_PORT)
+    assert settings == TransportSettings("http", DEFAULT_PORT)
 
 
-def test_http_host_and_port():
-    env = {"ANTAHKARANA_TRANSPORT": " HTTP ", "ANTAHKARANA_HOST": "::1", "ANTAHKARANA_PORT": "9123"}
-    assert load_transport_settings(env) == TransportSettings("http", "::1", 9123)
+def test_http_port():
+    env = {"ANTAHKARANA_TRANSPORT": "http", "ANTAHKARANA_PORT": "9123"}
+    assert load_transport_settings(env) == TransportSettings("http", 9123)
 
 
 @pytest.mark.parametrize("port", ["abc", "0", "65536", "-1", "80.5"])
@@ -48,9 +48,10 @@ def test_bad_port_refused(port):
         load_transport_settings(env)
 
 
-def test_unknown_transport_refused():
+@pytest.mark.parametrize("transport", ["sse", "HTTP", "Http", " http", "http ", "STDIO"])
+def test_unknown_transport_refused(transport):
     with pytest.raises(ValueError, match="ANTAHKARANA_TRANSPORT"):
-        load_transport_settings({"ANTAHKARANA_TRANSPORT": "sse"})
+        load_transport_settings({"ANTAHKARANA_TRANSPORT": transport})
 
 
 def _free_port() -> int:
@@ -93,7 +94,6 @@ def test_two_concurrent_clients_share_one_http_server(tmp_path):
     env = {
         **os.environ,
         "ANTAHKARANA_TRANSPORT": "http",
-        "ANTAHKARANA_HOST": "127.0.0.1",
         "ANTAHKARANA_PORT": str(port),
         "ANTAHKARANA_DATA_DIR": str(tmp_path / "data"),
         "ANTAHKARANA_CONFIG_DIR": str(ROOT / "config"),

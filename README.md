@@ -54,7 +54,7 @@ Under stdio each Claude Code session starts its own server, and the Zvec vector 
 
 ## Running a shared server
 
-Set `ANTAHKARANA_TRANSPORT=http` and the server runs once over MCP streamable HTTP at `http://ANTAHKARANA_HOST:ANTAHKARANA_PORT/mcp` (defaults `127.0.0.1` and `8799`); every client on the machine connects to that one process. stdio stays the default.
+Set `ANTAHKARANA_TRANSPORT=http` and the server runs once over MCP streamable HTTP at `http://127.0.0.1:ANTAHKARANA_PORT/mcp` (default port `8799`); every client on the machine connects to that one process. stdio stays the default.
 
 ```bash
 ANTAHKARANA_TRANSPORT=http ANTAHKARANA_PORT=8799 python -m src
@@ -75,7 +75,7 @@ Then register Claude Code against the URL instead of the command (remove a stdio
 claude mcp add --scope user --transport http antahkarana http://127.0.0.1:8799/mcp
 ```
 
-The HTTP endpoint has no authentication: any process on the machine that can reach the port can read and write memories, so keep it on `127.0.0.1`. Stop the service before running `python -m src.dvarapala audit` or `purge`, which need the store to themselves.
+The HTTP endpoint has no authentication: any process on the machine that can reach the port can read and write memories. It always binds `127.0.0.1`, so nothing off the machine can reach it. Stop the service before running `python -m src.dvarapala audit` or `purge`, which need the store to themselves.
 
 ## Connecting to OpenClaw
 

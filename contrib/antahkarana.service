@@ -12,7 +12,6 @@ Description=Antaḥkaraṇa memory server (MCP streamable HTTP)
 Type=simple
 WorkingDirectory=%h/.local/share/antahkarana/app
 Environment=ANTAHKARANA_TRANSPORT=http
-Environment=ANTAHKARANA_HOST=127.0.0.1
 Environment=ANTAHKARANA_PORT=8799
 ExecStart=%h/.local/share/antahkarana/app/.venv/bin/python -m src
 Restart=on-failure
