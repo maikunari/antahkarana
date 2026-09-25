@@ -7,6 +7,7 @@ dependencies = [
     "mcp>=1.25,<2",
     "zvec",
     "google-genai",
+    "google-re2",
     "pyyaml",
     "python-dotenv",
 ]

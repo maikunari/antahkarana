@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS determinations (
     determination TEXT NOT NULL,
     feedback_id TEXT,
     created_at TEXT NOT NULL,
+    memory_id TEXT,  -- the memory this determination stored, so forget can reach it
     FOREIGN KEY (feedback_id) REFERENCES feedback(id)
 );
 
@@ -62,6 +63,23 @@ CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance);
 CREATE INDEX IF NOT EXISTS idx_memories_created ON memories(created_at);
 CREATE INDEX IF NOT EXISTS idx_memories_sattva ON memories(sattva);
 """
+
+# Runs after SCHEMA_SQL, once any columns added since a database was created exist.
+INDEX_SQL = """
+CREATE INDEX IF NOT EXISTS idx_determinations_memory ON determinations(memory_id);
+"""
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring a database created by an earlier version up to SCHEMA_SQL."""
+    columns = {row[1] for row in conn.execute("PRAGMA table_info(determinations)")}
+    if "memory_id" not in columns:
+        conn.execute("ALTER TABLE determinations ADD COLUMN memory_id TEXT")
+        conn.execute(
+            """UPDATE determinations
+            SET memory_id = json_extract(determination, '$.final.memory_id')
+            WHERE json_valid(determination)"""
+        )
 
 
 def init_db(db_path: str | Path) -> sqlite3.Connection:
@@ -76,6 +94,11 @@ def init_db(db_path: str | Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    # Overwrite deleted and replaced content instead of leaving it in free pages.
+    # The compiled-in default varies by platform, so never rely on it.
+    conn.execute("PRAGMA secure_delete=ON")
     conn.executescript(SCHEMA_SQL)
+    _migrate(conn)
+    conn.executescript(INDEX_SQL)
     conn.commit()
     return conn

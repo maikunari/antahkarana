@@ -1,0 +1,8 @@
+# Dvārapāla — the secrets keeper's local settings.
+#
+# allow: RE2 regexes for values the keeper should NOT treat as secrets.
+# Each is matched against the candidate secret value itself. Add one only for
+# a recurring false positive you have checked by hand; every entry widens
+# what can reach Gemini, Jev and Chitta. There is deliberately no per-call
+# override: an agent could be talked into using it.
+allow: []

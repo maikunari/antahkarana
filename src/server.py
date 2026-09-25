@@ -17,6 +17,7 @@ from src.buddhi.embeddings import EmbeddingEngine
 from src.buddhi.engine import BuddhiEngine
 from src.buddhi.jev import JevClient
 from src.chitta.store import ChittaStore
+from src.dvarapala.keeper import Keeper
 from src.manas import tools
 
 # Load environment
@@ -32,8 +33,10 @@ TYPESAFE_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")
 DATA_DIR = os.environ.get("ANTAHKARANA_DATA_DIR", "./data")
 CONFIG_DIR = os.environ.get("ANTAHKARANA_CONFIG_DIR", "./config")
 
-# Initialize components
-chitta = ChittaStore(data_dir=DATA_DIR)
+# Initialize components. The secrets keeper loads first: without it nothing starts.
+keeper = Keeper.load(CONFIG_DIR)
+logger.info("Secrets keeper: %d rules", keeper.rule_count)
+chitta = ChittaStore(data_dir=DATA_DIR, keeper=keeper)
 chitta.init()
 
 embeddings = EmbeddingEngine(api_key=GEMINI_API_KEY)
@@ -72,6 +75,7 @@ def remember(
         scope=scope,
         importance=importance,
         source_agent=source_agent,
+        keeper=keeper,
     )
     return json.dumps(result, indent=2)
 
@@ -101,6 +105,7 @@ def recall(
         limit=limit,
         scope=scope,
         include_latent=include_latent,
+        keeper=keeper,
     )
     return json.dumps(result, indent=2)
 
