@@ -15,6 +15,7 @@ from mcp.server.fastmcp import FastMCP
 
 from src.buddhi.embeddings import EmbeddingEngine
 from src.buddhi.engine import BuddhiEngine
+from src.buddhi.jev import JevClient
 from src.chitta.store import ChittaStore
 from src.manas import tools
 
@@ -26,6 +27,8 @@ logger = logging.getLogger("antahkarana")
 
 # Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# Optional: enables the Jev shadow judge. Absent means off; Gemini decides either way.
+TYPESAFE_API_KEY = os.environ.get("TYPESAFE_API_KEY", "")
 DATA_DIR = os.environ.get("ANTAHKARANA_DATA_DIR", "./data")
 CONFIG_DIR = os.environ.get("ANTAHKARANA_CONFIG_DIR", "./config")
 
@@ -34,7 +37,9 @@ chitta = ChittaStore(data_dir=DATA_DIR)
 chitta.init()
 
 embeddings = EmbeddingEngine(api_key=GEMINI_API_KEY)
-buddhi = BuddhiEngine(api_key=GEMINI_API_KEY, config_dir=CONFIG_DIR)
+jev = JevClient(api_key=TYPESAFE_API_KEY) if TYPESAFE_API_KEY else None
+logger.info("Jev shadow judge: %s", f"on ({jev.model})" if jev else "off")
+buddhi = BuddhiEngine(api_key=GEMINI_API_KEY, config_dir=CONFIG_DIR, jev=jev)
 
 # Create MCP server
 mcp = FastMCP("antahkarana")

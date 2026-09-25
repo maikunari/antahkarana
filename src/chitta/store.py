@@ -6,8 +6,10 @@ If Zvec write fails, SQLite transaction is rolled back.
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -259,6 +261,23 @@ class ChittaStore:
 
         self._db.commit()
         return affected
+
+    def log_determination(self, input_text: str, determination: dict) -> str:
+        """Record one Buddhi determination in the determinations table. Returns its ID."""
+        assert self._db is not None
+        determination_id = str(uuid.uuid4())
+        self._db.execute(
+            """INSERT INTO determinations (id, input_text, determination, created_at)
+            VALUES (?, ?, ?, ?)""",
+            (
+                determination_id,
+                input_text,
+                json.dumps(determination),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        self._db.commit()
+        return determination_id
 
     def close(self) -> None:
         """Close database connections."""

@@ -179,8 +179,8 @@ CREATE TABLE feedback (
 -- Buddhi determination log (for Adhyavasāya learning)
 CREATE TABLE determinations (
     id TEXT PRIMARY KEY,
-    input_text TEXT NOT NULL,                -- What was evaluated
-    determination TEXT NOT NULL,             -- JSON: {importance, scope, categories, store_decision}
+    input_text TEXT NOT NULL,                -- What was evaluated (row shape: README "Determination log and Jev shadow mode")
+    determination TEXT NOT NULL,             -- JSON trace of the determination and its outcome
     feedback_id TEXT,                        -- If user later corrected this determination
     created_at TEXT NOT NULL,
     FOREIGN KEY (feedback_id) REFERENCES feedback(id)
