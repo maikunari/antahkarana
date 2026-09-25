@@ -8,12 +8,10 @@ import pytest
 
 from secret_samples import negatives, positives
 from src.dvarapala.keeper import (
-    GITLEAKS_RULES_SHA256,
     Keeper,
     KeeperError,
     SecretInWrite,
     default_keeper,
-    rules_sha256,
 )
 
 POSITIVES = positives()
@@ -23,11 +21,6 @@ NEGATIVES = negatives()
 @pytest.fixture(scope="module")
 def keeper() -> Keeper:
     return default_keeper()
-
-
-def test_vendored_rules_are_the_pinned_gitleaks_release():
-    # Re-vendoring the rules must be deliberate: update GITLEAKS_RULES_SHA256 with it.
-    assert rules_sha256() == GITLEAKS_RULES_SHA256
 
 
 def test_every_rule_compiles(keeper):

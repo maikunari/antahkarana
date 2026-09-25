@@ -184,7 +184,8 @@ def test_recall_scrubs_the_query_before_embedding_it(chitta, monkeypatch):
     assert SECRET not in embedded
     assert embedded.startswith("which key is [secret:")
     assert result["query"] == embedded
-    assert result["query_redacted"] is True
+    assert result["redactions"] == [{"field": "query", "kind": "high-entropy", "count": 1}]
+    assert SECRET not in json.dumps(result)
 
 
 def test_recall_without_a_secret_is_unchanged(chitta, monkeypatch):

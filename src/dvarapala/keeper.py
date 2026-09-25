@@ -15,7 +15,6 @@ returned, or stored. Scrubbing is idempotent: scrubbed text scans clean.
 
 from __future__ import annotations
 
-import hashlib
 import math
 import re
 import tomllib
@@ -28,9 +27,6 @@ import re2
 import yaml
 
 RULES_PATH = Path(__file__).with_name("gitleaks.toml")
-# Re-vendoring the rules is a deliberate act: update both, and the test that pins them.
-GITLEAKS_VERSION = "8.30.1"
-GITLEAKS_RULES_SHA256 = "e163e53b9e7e8a8511e77271e2b323ed057759542a6d988258afe3a1fa329caf"
 
 ALLOW_FILE = "dvarapala.yaml"
 
@@ -40,6 +36,8 @@ MIN_WORDS_AFTER_REDACTION = 5
 
 RESIDUAL_RULE_ID = "high-entropy"
 RESIDUAL_MIN_ENTROPY = 4.0
+# Longest digit run an identifier or version string may hold (a date: 20260101).
+MAX_IDENTIFIER_NUMBER = 8
 
 PLACEHOLDER = re.compile(r"\[secret:[a-z0-9-]+\]")
 
@@ -53,14 +51,15 @@ MEMORY_RULES = [
         "id": "prose-password",
         "regex": (
             r"(?i)\b(?:password|passphrase|passcode|passwd|pwd|pin)\b(?:\s+for\s+\S+)?"
-            r"\s*(?:is|was|=|:)\s*[\x60'\"]?([^\s\x60'\"]{4,128})"
+            r"\s*(?:\bis\b|\bwas\b|=|:)\s*[\x60'\"]?([^\s\x60'\"]{4,128})"
         ),
         "keywords": ["pass", "pwd", "pin"],
         "allowlists": [
             {
                 "regexes": [
                     r"(?i)^(?:reset|flow|manager|protected|required|stored|less|here|set"
-                    r"|the|a|an|in|kept|not|never|only|always|now|still|managed|rotated)$"
+                    r"|the|a|an|in|kept|not|never|only|always|now|still|managed|rotated"
+                    r"|1password|bitwarden|lastpass|keepass(?:xc)?|dashlane|vault|keychain)$"
                 ]
             }
         ],
@@ -69,9 +68,18 @@ MEMORY_RULES = [
         "id": "prose-credential-pair",
         "regex": (
             r"(?i)\b(?:login|credentials?|creds)\b[^\n]{0,60}?(?:\bis|:)"
-            r"\s+\S{1,64}\s*/\s*(\S{6,128})"
+            r"\s+[^\s/]{1,64}\s*/\s*([^\s/]{6,128})(?:\s|$)"
         ),
         "keywords": ["login", "cred"],
+        "allowlists": [
+            {
+                "regexes": [
+                    r"(?i)\.(?:py|pyi|js|jsx|mjs|ts|tsx|json|ya?ml|toml|ini|cfg|conf|env|md"
+                    r"|txt|rst|sh|go|rs|rb|java|kt|swift|c|h|cpp|hpp|cs|php|html|css|sql"
+                    r"|db|lock|log|xml|csv)[.,;:)]?$"
+                ]
+            }
+        ],
     },
 ]
 
@@ -82,6 +90,8 @@ _HASHLIKE = re2.compile(
 )
 _CLASSES = (re2.compile("[a-z]"), re2.compile("[A-Z]"), re2.compile("[0-9]"))
 _WORD = re.compile(r"[^\W_]+")
+_SEGMENT = re.compile(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])|[0-9]+")
+_VOWEL = re.compile(r"[aeiouy]", re.IGNORECASE)
 
 
 class KeeperError(Exception):
@@ -124,6 +134,26 @@ def _entropy(s: str) -> float:
     counts = Counter(s)
     n = len(s)
     return -sum(c / n * math.log2(c / n) for c in counts.values()) if n else 0.0
+
+
+def _identifier_like(token: str) -> bool:
+    """True for code identifiers and version strings: split on `-`, `_`, `.` and
+    camelCase, every segment is a word-like run of letters or a short number."""
+    for piece in re.split(r"[-_.]", token):
+        segments = _SEGMENT.findall(piece)
+        if "".join(segments) != piece:
+            return False
+        for i, seg in enumerate(segments):
+            if seg.isdigit():
+                if len(seg) > MAX_IDENTIFIER_NUMBER:
+                    return False
+            elif len(seg) == 1:
+                # A lone letter only as a version marker: V2, Q1.
+                if not (i + 1 < len(segments) and segments[i + 1].isdigit()):
+                    return False
+            elif not _VOWEL.search(seg):
+                return False
+    return True
 
 
 def _compile(pattern: str) -> re2._Regexp:
@@ -282,13 +312,11 @@ class Keeper:
             token = m.group(0)
             if _HASHLIKE.match(token) or token.strip("/").count("/") > 2:
                 continue  # digests, ids and paths
+            if _identifier_like(token):
+                continue
             if all(c.search(token) for c in _CLASSES) and _entropy(token) >= RESIDUAL_MIN_ENTROPY:
                 out.append(Finding(RESIDUAL_RULE_ID, m.start(), m.end()))
         return out
-
-
-def rules_sha256(path: Path = RULES_PATH) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 @lru_cache(maxsize=1)

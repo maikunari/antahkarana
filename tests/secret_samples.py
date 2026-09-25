@@ -115,6 +115,18 @@ def negatives() -> list[str]:
         f"The TypeSafe response id was req_{_s(24, HEX)} for the slow 1,795 ms call.",
         f"Cloudflare zone id {_s(32, HEX)} is the ellune.app zone.",
         "The password is stored in 1Password, never in the repo.",
+        # Prose rules must not fire inside words, on paths, or on a vault pointer.
+        "Fixed the password issues in the login form.",
+        "The password isolation policy applies to every tenant.",
+        "Store the password: 1Password item 'Staging DB'",
+        "Login handler: src/auth/session.py owns the cookie refresh",
+        "Credentials loader: config/credentials.yaml is read at startup",
+        # Identifiers and version strings are not random-looking tokens.
+        "getUserAccountBalance2024ForReport feeds the monthly statement.",
+        "The dashboard calls useQueryClientV2WithRetryLogic on mount.",
+        "Run MigrateOrdersToV3Schema_2026Q1 before the Shopify cutover.",
+        "The image pins python3.12-Django4.2-Postgres16.1 for partsmap.",
+        "Jozu evals ran on claude-opus-5-5-20260101-Preview last week.",
     ]
 
 

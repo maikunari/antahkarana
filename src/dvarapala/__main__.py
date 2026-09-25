@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from src.dvarapala.audit import audit, purge
+from src.dvarapala.audit import EmbedderRequired, audit, purge
 from src.dvarapala.keeper import Keeper
 
 
@@ -53,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
         embed = EmbeddingEngine(api_key=os.environ["GEMINI_API_KEY"]).embed
     try:
         before, after, files = purge(args.data_dir, keeper, embed)
-    except RuntimeError as err:
+    except EmbedderRequired as err:
         print(f"Nothing changed: {err}")
         return 2
     print("Before:")

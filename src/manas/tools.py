@@ -232,7 +232,7 @@ def recall(
         "memories": [r.to_dict() for r in results],
     }
     if scrubbed.redacted:
-        result["query_redacted"] = True
+        result["redactions"] = _redactions(query=scrubbed)
     return result
 
 

@@ -86,7 +86,7 @@ Retrieve relevant memories via semantic search with composite scoring.
 | `scope` | string | no | Restrict to a scope subtree |
 | `include_latent` | bool | no | Include dormant memories (default false) |
 
-Returns: Ranked list of memories with `content`, `scope`, `importance`, `score`, `state`. A secret in the query is removed before it is embedded; the result then echoes the scrubbed query and adds `query_redacted: true`.
+Returns: Ranked list of memories with `content`, `scope`, `importance`, `score`, `state`. A secret in the query is removed before it is embedded; the result then echoes the scrubbed query and adds `redactions` (field, kind and count, never the value).
 
 Scoring: `0.6 * semantic_similarity + 0.2 * importance + 0.2 * recency` (30-day half-life exponential decay).
 

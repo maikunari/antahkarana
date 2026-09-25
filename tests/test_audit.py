@@ -11,7 +11,7 @@ from secret_samples import a_secret_sentence, positives
 from src.chitta.schema import init_db
 from src.chitta.store import DISSOLVED_CONTENT, ChittaStore
 from src.dvarapala.__main__ import main
-from src.dvarapala.audit import audit, purge
+from src.dvarapala.audit import EmbedderRequired, audit, purge
 from src.dvarapala.keeper import default_keeper
 
 SAMPLE = a_secret_sentence()
@@ -126,10 +126,28 @@ def test_purge_removes_every_secret_and_verifies_it(seeded):
 def test_purge_changes_nothing_when_it_cannot_re_embed(seeded):
     before = _snapshot(seeded)
 
-    with pytest.raises(RuntimeError, match="GEMINI_API_KEY"):
+    with pytest.raises(EmbedderRequired, match="GEMINI_API_KEY"):
         purge(seeded, default_keeper(), None)
 
     assert _snapshot(seeded) == before
+
+
+def test_purge_needs_no_embedder_when_nothing_is_re_embedded(tmp_path):
+    # Secret-only memories are dissolved and dissolved ones purged: no new vector either way.
+    data = tmp_path / "data"
+    chitta = ChittaStore(data)
+    chitta.init()
+    _insert_memory(chitta._db, chitta._vec, "m22", f"GITHUB_TOKEN={BARE}")
+    _insert_memory(chitta._db, chitta._vec, "m4444", f"Old {BARE} memory.", state="dissolved")
+    chitta._db.commit()
+    chitta._vec.flush()
+    chitta.close()
+
+    before, after, files = purge(data, default_keeper(), None)
+
+    assert not before.clean
+    assert after.clean and files == 0
+    assert BARE.encode() not in _all_bytes(data)
 
 
 def test_cli_never_prints_a_secret(seeded, capsys, monkeypatch):

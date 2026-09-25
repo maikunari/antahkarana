@@ -25,11 +25,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from src.chitta.store import DISSOLVED_CONTENT, ChittaStore
-from src.dvarapala.keeper import Finding, Keeper
+from src.dvarapala.keeper import Finding, Keeper, Scrubbed
 
 PURGE_REASON = "Secret purged by the secrets keeper"
 # Shorter values (a PIN, say) would match unrelated bytes in the byte search.
 MIN_VERIFY_LENGTH = 8
+
+
+class EmbedderRequired(Exception):
+    """Purge would re-embed scrubbed memories but has no embedder. Raised before any write."""
 
 
 @dataclass
@@ -156,18 +160,17 @@ def purge(
     """
     db_path = Path(data_dir) / "chitta.db"
     before = audit(db_path, keeper)
-    content_hits = {
-        h.row_id for h in before.hits if h.table == "memories" and h.column == "content"
-    }
-    if content_hits and embed is None:
-        raise RuntimeError(
-            f"{len(content_hits)} memories need re-embedding after scrubbing; set GEMINI_API_KEY"
+    memories = _hit_memories(db_path, keeper, before)
+    to_embed = sum(1 for row, content in memories if _re_embeds(row, content))
+    if to_embed and embed is None:
+        raise EmbedderRequired(
+            f"{to_embed} memories need re-embedding after scrubbing; set GEMINI_API_KEY"
         )
 
     chitta = ChittaStore(data_dir, keeper=keeper)
     chitta.init()
     try:
-        _purge_memories(chitta, db_path, keeper, before, embed)
+        _purge_memories(chitta, keeper, memories, embed)
         chitta.purge_content(before.unpurged_dissolved)
         _purge_logs(chitta, db_path, keeper, before)
         chitta.compact()
@@ -178,10 +181,11 @@ def purge(
     return before, after, _files_holding(Path(data_dir), before._values)
 
 
-def _purge_memories(chitta, db_path, keeper, report, embed) -> None:
+def _hit_memories(db_path, keeper, report) -> list[tuple[sqlite3.Row, Scrubbed]]:
+    """Each memory the audit hit, with its content scrubbed."""
     ids = sorted({h.row_id for h in report.hits if h.table == "memories"})
     if not ids:
-        return
+        return []
     conn = _open_readonly(db_path)
     try:
         rows = {r["id"]: r for r in conn.execute(
@@ -189,10 +193,18 @@ def _purge_memories(chitta, db_path, keeper, report, embed) -> None:
         )}
     finally:
         conn.close()
-    for memory_id in ids:
-        row = rows[memory_id]
+    return [(rows[i], keeper.scrub(rows[i]["content"])) for i in ids]
+
+
+def _re_embeds(row: sqlite3.Row, content: Scrubbed) -> bool:
+    """A memory that stays active with scrubbed content needs a new vector."""
+    return row["state"] != "dissolved" and content.redacted and not content.secret_only()
+
+
+def _purge_memories(chitta, keeper, memories, embed) -> None:
+    for row, content in memories:
+        memory_id = row["id"]
         dissolved = row["state"] == "dissolved"
-        content = keeper.scrub(row["content"])
         if not dissolved and content.secret_only():
             chitta.dissolve([memory_id], PURGE_REASON)
             continue
@@ -205,7 +217,7 @@ def _purge_memories(chitta, db_path, keeper, report, embed) -> None:
             scope="/" if keeper.find(row["scope"] or "") else row["scope"],
             categories=[c for c in categories if not keeper.find(str(c))],
             source_agent=None if agent and keeper.find(agent) else agent,
-            embedding=embed(new_content) if content.redacted and not dissolved else None,
+            embedding=embed(new_content) if _re_embeds(row, content) else None,
         )
 
 
